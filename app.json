@@ -1,0 +1,40 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/add/add"
+  ],
+  "window": {
+    "navigationBarTitleText": "妆妆记",
+    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f5f5f5"
+  },
+  "tabBar": {
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "我的化妆品",
+        "iconPath": "images/icon_list.png",
+        "selectedIconPath": "images/icon_list_selected.png"
+      },
+      {
+        "pagePath": "pages/add/add",
+        "text": "添加",
+        "iconPath": "images/icon_add.png",
+        "selectedIconPath": "images/icon_add_selected.png"
+      }
+    ],
+    "color": "#666666",
+    "selectedColor": "#ff6b6b",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "black"
+  },
+  "permission": {
+    "scope.camera": {
+      "desc": "用于拍摄化妆品照片"
+    },
+    "scope.writePhotosAlbum": {
+      "desc": "用于保存化妆品照片"
+    }
+  }
+}

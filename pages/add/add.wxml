@@ -1,0 +1,60 @@
+<!-- 添加化妆品页面 -->
+<view class="container">
+  <!-- 图片上传区域 -->
+  <view class="upload-container">
+    <text class="section-title">化妆品图片</text>
+    <view class="upload-area" bindtap="chooseImage">
+      <image wx:if="{{formData.imageUrl}}" src="{{formData.imageUrl}}" class="uploaded-img" mode="aspectFill"></image>
+      <view wx:else class="upload-placeholder">
+        <image src="/images/icon_camera.png" class="camera-icon"></image>
+        <text class="upload-text">点击上传图片</text>
+      </view>
+      <view class="upload-tips">支持拍照或从相册选择</view>
+    </view>
+  </view>
+
+  <!-- 表单区域 -->
+  <view class="form-container">
+    <!-- 名称输入 -->
+    <view class="form-item">
+      <text class="form-label required">名称</text>
+      <input class="form-input" placeholder="请输入化妆品名称" value="{{formData.name}}" bindinput="handleInput" data-field="name"></input>
+    </view>
+
+    <!-- 类别选择 -->
+    <view class="form-item">
+      <text class="form-label required">类别</text>
+      <picker class="form-picker" value="{{formData.categoryIndex}}" range="{{categories}}" range-key="name" bindchange="handleCategoryChange">
+        <view class="picker-text">{{categories[formData.categoryIndex] ? categories[formData.categoryIndex].name : '请选择类别'}}</view>
+      </picker>
+    </view>
+
+    <!-- 购买日期 -->
+    <view class="form-item">
+      <text class="form-label">购买日期</text>
+      <picker class="form-picker" mode="date" value="{{formData.purchaseDate}}" start="2000-01-01" end="{{currentDate}}" bindchange="handleDateChange" data-field="purchaseDate">
+        <view class="picker-text">{{formData.purchaseDate || '请选择购买日期'}}</view>
+      </picker>
+    </view>
+
+    <!-- 过期日期 -->
+    <view class="form-item">
+      <text class="form-label required">过期日期</text>
+      <picker class="form-picker" mode="date" value="{{formData.expiryDate}}" start="{{currentDate}}" end="2050-12-31" bindchange="handleDateChange" data-field="expiryDate">
+        <view class="picker-text">{{formData.expiryDate || '请选择过期日期'}}</view>
+      </picker>
+      <text class="date-tip">* 请选择准确的过期日期以获取提醒</text>
+    </view>
+
+    <!-- 备注信息 -->
+    <view class="form-item">
+      <text class="form-label">备注</text>
+      <textarea class="form-textarea" placeholder="添加备注信息（可选）" value="{{formData.notes}}" bindinput="handleInput" data-field="notes" maxlength="200"></textarea>
+    </view>
+  </view>
+
+  <!-- 保存按钮 -->
+  <view class="btn-container">
+    <button class="save-btn" bindtap="saveCosmetic" disabled="{{!canSave}}">保存化妆品</button>
+  </view>
+</view>

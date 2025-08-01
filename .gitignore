@@ -1,0 +1,30 @@
+# 微信小程序相关
+project.private.config.json
+.DS_Store
+
+# 开发工具生成的文件
+.vscode/
+.idea/
+
+# 日志文件
+*.log
+npm-debug.log*
+
+# 依赖目录
+node_modules/
+
+# 临时文件
+*.tmp
+*.temp
+
+# 系统文件
+Thumbs.db
+.DS_Store
+
+# 微信开发者工具生成的文件
+miniprogram_npm/
+.tea/
+
+# 备份文件
+*.bak
+*.backup

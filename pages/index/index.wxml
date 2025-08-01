@@ -1,0 +1,145 @@
+<!-- 首页：化妆品列表展示 -->
+<view class="container">
+  <!-- 顶部统计信息 -->
+  <view class="stats-container">
+    <view class="stat-item">
+      <text class="stat-number">{{totalCount}}</text>
+      <text class="stat-label">总数量</text>
+    </view>
+
+  <!-- 编辑弹窗 -->
+  <!-- 编辑弹窗 -->
+  <view class="modal-mask" wx:if="{{showEditModal}}" bindtap="closeEditModal"></view>
+  <view class="modal-container" wx:if="{{showEditModal}}">
+    <view class="modal-header">
+      <text class="modal-title">编辑化妆品</text>
+      <view class="modal-close" bindtap="closeEditModal"></view>
+    </view>
+    <view class="modal-content">
+      <!-- 图片上传区域 -->
+      <view class="upload-container">
+        <text class="section-title">化妆品图片</text>
+        <view class="upload-area" bindtap="chooseImage">
+          <image wx:if="{{editForm.imageUrl}}" src="{{editForm.imageUrl}}" class="uploaded-img" mode="aspectFill"></image>
+          <view wx:else class="upload-placeholder">
+            <image src="/images/icon_camera.png" class="camera-icon"></image>
+            <text class="upload-text">点击上传图片</text>
+          </view>
+          <view class="upload-tips">支持拍照或从相册选择</view>
+        </view>
+      </view>
+
+      <!-- 表单区域 -->
+      <view class="form-container">
+        <!-- 名称输入 -->
+        <view class="form-item">
+          <text class="form-label required">名称</text>
+          <input class="form-input" placeholder="请输入化妆品名称" value="{{editForm.name}}" bindinput="onInputChange" data-field="name"></input>
+        </view>
+
+        <!-- 类别选择 -->
+        <view class="form-item">
+          <text class="form-label required">类别</text>
+          <picker class="form-picker" value="{{editForm.categoryIndex}}" range="{{categories}}" bindchange="onCategoryChange">
+            <view class="picker-text">{{editForm.category || '请选择类别'}}</view>
+          </picker>
+        </view>
+
+        <!-- 购买日期 -->
+        <view class="form-item">
+          <text class="form-label">购买日期</text>
+          <picker class="form-picker" mode="date" value="{{editForm.purchaseDate}}" start="2000-01-01" end="{{currentDate}}" bindchange="onPurchaseDateChange">
+            <view class="picker-text">{{editForm.purchaseDate || '请选择购买日期'}}</view>
+          </picker>
+        </view>
+
+        <!-- 过期日期 -->
+        <view class="form-item">
+          <text class="form-label required">过期日期</text>
+          <picker class="form-picker" mode="date" value="{{editForm.expiryDate}}" start="{{currentDate}}" end="2050-12-31" bindchange="onExpiryDateChange">
+            <view class="picker-text">{{editForm.expiryDate}}</view>
+          </picker>
+          <text class="date-tip">* 请选择准确的过期日期以获取提醒</text>
+        </view>
+
+        <!-- 备注信息 -->
+        <view class="form-item">
+          <text class="form-label">备注</text>
+          <textarea class="form-textarea" placeholder="添加备注信息（可选）" value="{{editForm.remarks}}" bindinput="onInputChange" data-field="remarks" maxlength="200"></textarea>
+        </view>
+      </view>
+    </view>
+    <view class="modal-footer">
+      <button class="cancel-btn" bindtap="closeEditModal">取消</button>
+      <button class="save-btn" bindtap="saveCosmetic">保存</button>
+    </view>
+  </view>
+    <view class="stat-item warning">
+      <text class="stat-number">{{expiringCount}}</text>
+      <text class="stat-label">即将过期</text>
+    </view>
+    <view class="stat-item danger">
+      <text class="stat-number">{{expiredCount}}</text>
+      <text class="stat-label">已过期</text>
+    </view>
+  </view>
+
+  <!-- 列表区域 -->
+  <view class="list-container">
+    <!-- 空状态 -->
+    <view wx:if="{{cosmetics.length === 0}}" class="empty-state">
+      <image src="/images/empty.png" class="empty-img"></image>
+      <text class="empty-text">还没有添加化妆品</text>
+      <button class="add-btn" bindtap="navigateToAdd">添加第一个化妆品</button>
+    </view>
+
+    <!-- 化妆品列表 -->
+    <view wx:else class="cosmetic-list">
+      <block wx:for="{{cosmetics}}" wx:key="id">
+        <view class="cosmetic-item expanded">
+          <!-- 化妆品图片 -->
+          <view class="item-img-container">
+            <image src="{{item.imageUrl}}" class="item-img" mode="aspectFill"></image>
+            <!-- 过期状态标记 -->
+            <view wx:if="{{item.isExpired}}" class="status-badge expired">已过期</view>
+            <view wx:elif="{{item.isTodayExpired}}" class="status-badge today-expired">今天过期</view>
+            <view wx:elif="{{item.daysLeft <= reminderDays}}" class="status-badge warning">即将过期</view>
+          </view>
+
+          <!-- 化妆品信息 -->
+          <view class="item-info">
+            <view class="item-name">{{item.name}}</view>
+            <view class="item-category">{{item.category}}</view>
+            <view class="item-days-left {{item.isExpired ? 'danger' : (item.isTodayExpired ? 'today-expired' : (item.daysLeft <= reminderDays ? 'warning' : ''))}}">
+              {{item.isTodayExpired ? '今天过期' : item.daysLeft > 0 ? '剩余' + item.daysLeft + '天' : '已过期'}}
+            </view>
+            <view class="item-details">
+              <view class="detail-item">
+                <text class="detail-label">过期日期：</text>
+                <text class="detail-value">{{item.expiryDate}}</text>
+              </view>
+              <view class="detail-item">
+                <text class="detail-label">购买日期：</text>
+                <text class="detail-value">{{item.purchaseDate || '未设置'}}</text>
+              </view>
+              <view class="detail-item notes">
+                <text class="detail-label">备注：</text>
+                <text class="detail-value">{{item.remarks || '无'}}</text>
+              </view>
+              <view class="detail-item">
+                <text class="detail-label">添加时间：</text>
+                <text class="detail-value">{{formatCreateTime(item.createTime)}}</text>
+              </view>
+            </view>
+          </view>
+
+          <!-- 操作按钮 -->
+          <view class="item-actions">
+            <button class="edit-btn" bindtap="navigateToEdit" data-id="{{item.id}}">编辑</button>
+            <button class="delete-btn" bindtap="handleDelete" data-id="{{item.id}}">删除</button>
+          </view>
+        </view>
+      </block>
+    </view>
+  </view>
+</view>
