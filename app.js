@@ -9,11 +9,12 @@ App({
 
   // 应用初始化
   onLaunch() {
-    // 从本地存储加载数据
-    const storedCosmetics = wx.getStorageSync('cosmetics');
-    if (storedCosmetics) {
-      this.globalData.cosmetics = storedCosmetics;
-    }
+    // 清空本地存储的化妆品数据（用于测试）
+    wx.removeStorageSync('cosmetics');
+    console.log('缓存已清空，可以从头开始测试');
+    
+    // 重置全局数据
+    this.globalData.cosmetics = [];
 
     // 检查是否需要发送提醒
     this.checkReminders();
