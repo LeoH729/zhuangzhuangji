@@ -4,20 +4,38 @@ App({
   globalData: {
     cosmetics: [], // 存储化妆品记录的数组
     reminderDays: 30, // 默认提前30天提醒
-    currentDate: new Date().toISOString().split('T')[0] // 当前日期
+    currentDate: new Date().toISOString().split('T')[0], // 当前日期
+    dataLoaded: false, // 数据是否已加载
+    lastSaveTime: 0 // 上次保存时间戳
   },
 
   // 应用初始化
   onLaunch() {
-    // 清空本地存储的化妆品数据（用于测试）
-    wx.removeStorageSync('cosmetics');
-    console.log('缓存已清空，可以从头开始测试');
-    
-    // 重置全局数据
-    this.globalData.cosmetics = [];
+    // 初始化数据
+    this.initializeData();
 
     // 检查是否需要发送提醒
     this.checkReminders();
+  },
+
+  // 初始化数据（优化版本）
+  initializeData() {
+    try {
+      // 从本地存储加载数据
+      const storedData = wx.getStorageSync('cosmetics');
+      if (storedData && Array.isArray(storedData)) {
+        this.globalData.cosmetics = storedData;
+        console.log('成功加载', storedData.length, '条化妆品记录');
+      } else {
+        this.globalData.cosmetics = [];
+        console.log('初始化空的化妆品列表');
+      }
+      this.globalData.dataLoaded = true;
+    } catch (error) {
+      console.error('加载数据失败:', error);
+      this.globalData.cosmetics = [];
+      this.globalData.dataLoaded = true;
+    }
   },
 
   // 检查过期提醒

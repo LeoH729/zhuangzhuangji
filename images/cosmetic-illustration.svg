@@ -1,0 +1,39 @@
+<svg width="300" height="200" viewBox="0 0 300 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景装饰 -->
+  <ellipse cx="120" cy="160" rx="40" ry="8" fill="#FFB6C1" opacity="0.3"/>
+  <ellipse cx="180" cy="160" rx="40" ry="8" fill="#FFA07A" opacity="0.3"/>
+  
+  <!-- 左侧口红 -->
+  <g transform="translate(80, 40)">
+    <!-- 口红管身 -->
+    <rect x="10" y="60" width="30" height="80" rx="15" fill="#2C2C2C"/>
+    <!-- 口红管顶部 -->
+    <rect x="12" y="40" width="26" height="25" rx="13" fill="#D4AF37"/>
+    <!-- 口红膏体 -->
+    <ellipse cx="25" cy="45" rx="10" ry="15" fill="#FF69B4"/>
+    <!-- 高光 -->
+    <ellipse cx="22" cy="42" rx="3" ry="8" fill="#FFB6C1" opacity="0.6"/>
+  </g>
+  
+  <!-- 右侧口红 -->
+  <g transform="translate(160, 30)">
+    <!-- 口红管身 -->
+    <rect x="10" y="70" width="30" height="80" rx="15" fill="#2C2C2C"/>
+    <!-- 口红管顶部 -->
+    <rect x="12" y="50" width="26" height="25" rx="13" fill="#D4AF37"/>
+    <!-- 口红膏体 -->
+    <ellipse cx="25" cy="55" rx="10" ry="15" fill="#DC143C"/>
+    <!-- 高光 -->
+    <ellipse cx="22" cy="52" rx="3" ry="8" fill="#FF6B6B" opacity="0.6"/>
+  </g>
+  
+  <!-- 装饰性色彩斑点 -->
+  <circle cx="60" cy="100" r="15" fill="#FFB6C1" opacity="0.4"/>
+  <circle cx="240" cy="120" r="20" fill="#FFA07A" opacity="0.4"/>
+  <circle cx="50" cy="140" r="8" fill="#FF69B4" opacity="0.3"/>
+  <circle cx="250" cy="80" r="12" fill="#DC143C" opacity="0.3"/>
+  
+  <!-- 装饰线条 -->
+  <path d="M40 60 Q80 50 120 60" stroke="#FFB6C1" stroke-width="2" fill="none" opacity="0.5"/>
+  <path d="M180 50 Q220 40 260 50" stroke="#FFA07A" stroke-width="2" fill="none" opacity="0.5"/>
+</svg>

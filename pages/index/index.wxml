@@ -1,13 +1,21 @@
 <!-- 首页：化妆品列表展示 -->
 <view class="container">
   <!-- 顶部统计信息 -->
-  <view class="stats-container">
+  <view class="stats-container" wx:if="{{cosmetics.length > 0}}">
     <view class="stat-item">
       <text class="stat-number">{{totalCount}}</text>
       <text class="stat-label">总数量</text>
     </view>
+    <view class="stat-item warning">
+      <text class="stat-number">{{expiringCount}}</text>
+      <text class="stat-label">即将过期</text>
+    </view>
+    <view class="stat-item danger">
+      <text class="stat-number">{{expiredCount}}</text>
+      <text class="stat-label">已过期</text>
+    </view>
+  </view>
 
-  <!-- 编辑弹窗 -->
   <!-- 编辑弹窗 -->
   <view class="modal-mask" wx:if="{{showEditModal}}" bindtap="closeEditModal"></view>
   <view class="modal-container" wx:if="{{showEditModal}}">
@@ -34,38 +42,51 @@
         <!-- 名称输入 -->
         <view class="form-item">
           <text class="form-label required">名称</text>
-          <input class="form-input" placeholder="请输入化妆品名称" value="{{editForm.name}}" bindinput="onInputChange" data-field="name"></input>
+          <view class="input-container" bindtap="handleInputFocus" data-field="name">
+            <input class="form-input" placeholder="请输入化妆品名称" value="{{editForm.name}}" bindinput="onInputChange" bindfocus="handleFocus" data-field="name"></input>
+          </view>
         </view>
 
         <!-- 类别选择 -->
         <view class="form-item">
           <text class="form-label required">类别</text>
-          <picker class="form-picker" value="{{editForm.categoryIndex}}" range="{{categories}}" bindchange="onCategoryChange">
-            <view class="picker-text">{{editForm.category || '请选择类别'}}</view>
-          </picker>
+          <view class="input-container">
+            <picker class="form-picker" value="{{editForm.categoryIndex}}" range="{{categories}}" bindchange="onCategoryChange" data-field="category">
+              <view class="picker-text {{!editForm.category ? 'placeholder-style' : ''}}">{{editForm.category || '请选择类别'}}</view>
+            </picker>
+          </view>
         </view>
 
         <!-- 购买日期 -->
         <view class="form-item">
           <text class="form-label">购买日期</text>
-          <picker class="form-picker" mode="date" value="{{editForm.purchaseDate}}" start="2000-01-01" end="{{currentDate}}" bindchange="onPurchaseDateChange">
-            <view class="picker-text">{{editForm.purchaseDate || '请选择购买日期'}}</view>
-          </picker>
+          <view class="input-container">
+            <picker class="form-picker" mode="date" value="{{editForm.purchaseDate}}" start="2000-01-01" end="{{currentDate}}" bindchange="onPurchaseDateChange" data-field="purchaseDate">
+              <view class="picker-text {{!editForm.purchaseDate ? 'placeholder-style' : ''}}">{{editForm.purchaseDate || '请选择购买日期'}}</view>
+            </picker>
+          </view>
         </view>
 
         <!-- 过期日期 -->
         <view class="form-item">
           <text class="form-label required">过期日期</text>
-          <picker class="form-picker" mode="date" value="{{editForm.expiryDate}}" start="{{currentDate}}" end="2050-12-31" bindchange="onExpiryDateChange">
-            <view class="picker-text">{{editForm.expiryDate}}</view>
-          </picker>
+          <view class="input-container">
+            <picker class="form-picker" mode="date" value="{{editForm.expiryDate}}" start="{{currentDate}}" end="2050-12-31" bindchange="onExpiryDateChange" data-field="expiryDate">
+              <view class="picker-text {{!editForm.expiryDate ? 'placeholder-style' : ''}}">{{editForm.expiryDate || '请选择过期日期'}}</view>
+            </picker>
+          </view>
           <text class="date-tip">* 请选择准确的过期日期以获取提醒</text>
         </view>
 
         <!-- 备注信息 -->
         <view class="form-item">
-          <text class="form-label">备注</text>
-          <textarea class="form-textarea" placeholder="添加备注信息（可选）" value="{{editForm.remarks}}" bindinput="onInputChange" data-field="remarks" maxlength="200"></textarea>
+          <view class="form-label-container">
+            <text class="form-label">备注</text>
+            <text class="char-count">{{editForm.remarks.length || 0}}/14</text>
+          </view>
+          <view class="input-container" bindtap="handleInputFocus" data-field="remarks">
+            <textarea class="form-textarea" placeholder="添加备注信息（可选）" value="{{editForm.remarks}}" bindinput="onInputChange" bindfocus="handleFocus" data-field="remarks" maxlength="14" style="height:100rpx;"></textarea>
+          </view>
         </view>
       </view>
     </view>
@@ -74,69 +95,67 @@
       <button class="save-btn" bindtap="saveCosmetic">保存</button>
     </view>
   </view>
-    <view class="stat-item warning">
-      <text class="stat-number">{{expiringCount}}</text>
-      <text class="stat-label">即将过期</text>
-    </view>
-    <view class="stat-item danger">
-      <text class="stat-number">{{expiredCount}}</text>
-      <text class="stat-label">已过期</text>
-    </view>
-  </view>
 
   <!-- 列表区域 -->
-  <view class="list-container">
+  <view class="list-container {{cosmetics.length > 0 ? 'has-data' : 'empty'}}">
     <!-- 空状态 -->
     <view wx:if="{{cosmetics.length === 0}}" class="empty-state">
-      <image src="/images/empty.png" class="empty-img"></image>
-      <text class="empty-text">还没有添加化妆品</text>
-      <button class="add-btn" bindtap="navigateToAdd">添加第一个化妆品</button>
+      <view class="empty-content">
+
+        <view class="cosmetic-illustration">
+           <image src="/images/empty.png" class="illustration-img" mode="aspectFit"></image>
+         </view>
+        <button class="add-cosmetic-btn" bindtap="navigateToAdd">
+          <text class="btn-icon">+</text>
+          <text class="btn-text">添加化妆品</text>
+        </button>
+      </view>
     </view>
 
     <!-- 化妆品列表 -->
     <view wx:else class="cosmetic-list">
       <block wx:for="{{cosmetics}}" wx:key="id">
-        <view class="cosmetic-item expanded">
-          <!-- 化妆品图片 -->
-          <view class="item-img-container">
-            <image src="{{item.imageUrl}}" class="item-img" mode="aspectFill"></image>
-            <!-- 过期状态标记 -->
-            <view wx:if="{{item.isExpired}}" class="status-badge expired">已过期</view>
-            <view wx:elif="{{item.isTodayExpired}}" class="status-badge today-expired">今天过期</view>
-            <view wx:elif="{{item.daysLeft <= reminderDays}}" class="status-badge warning">即将过期</view>
-          </view>
-
-          <!-- 化妆品信息 -->
-          <view class="item-info">
-            <view class="item-name">{{item.name}}</view>
-            <view class="item-category">{{item.category}}</view>
+        <view class="cosmetic-item">
+          <view class="item-left">
+            <!-- 化妆品图片 -->
+            <view class="item-img-container">
+              <image src="{{item.imageUrl}}" class="item-img" mode="aspectFill"></image>
+              <!-- 过期状态标记 -->
+              <view wx:if="{{item.isExpired}}" class="status-badge expired">已过期</view>
+              <view wx:elif="{{item.isTodayExpired}}" class="status-badge today-expired">今天过期</view>
+              <view wx:elif="{{item.daysLeft <= reminderDays}}" class="status-badge warning">即将过期</view>
+            </view>
+            
+            <!-- 剩余天数 -->
             <view class="item-days-left {{item.isExpired ? 'danger' : (item.isTodayExpired ? 'today-expired' : (item.daysLeft <= reminderDays ? 'warning' : ''))}}">
               {{item.isTodayExpired ? '今天过期' : item.daysLeft > 0 ? '剩余' + item.daysLeft + '天' : '已过期'}}
             </view>
+          </view>
+
+          <!-- 化妆品信息 -->
+          <view class="item-right">
+            <view class="item-name">{{item.displayName || item.name}}</view>
+            <view class="item-category">{{item.category}}</view>
             <view class="item-details">
-              <view class="detail-item">
-                <text class="detail-label">过期日期：</text>
-                <text class="detail-value">{{item.expiryDate}}</text>
-              </view>
               <view class="detail-item">
                 <text class="detail-label">购买日期：</text>
                 <text class="detail-value">{{item.purchaseDate || '未设置'}}</text>
               </view>
-              <view class="detail-item notes">
-                <text class="detail-label">备注：</text>
-                <text class="detail-value">{{item.remarks || '无'}}</text>
-              </view>
               <view class="detail-item">
-                <text class="detail-label">添加时间：</text>
-                <text class="detail-value">{{formatCreateTime(item.createTime)}}</text>
+                <text class="detail-label">到期日期：</text>
+                <text class="detail-value">{{item.expiryDate}}</text>
+              </view>
+              <view wx:if="{{item.remarks}}" class="detail-item">
+                <text class="detail-label">备注：</text>
+                <text class="detail-value">{{item.remarks}}</text>
               </view>
             </view>
-          </view>
-
-          <!-- 操作按钮 -->
-          <view class="item-actions">
-            <button class="edit-btn" bindtap="navigateToEdit" data-id="{{item.id}}">编辑</button>
-            <button class="delete-btn" bindtap="handleDelete" data-id="{{item.id}}">删除</button>
+            
+            <!-- 操作按钮 -->
+            <view class="item-actions">
+              <image class="action-icon edit-icon" src="/images/icon_list_edit.png" bindtap="navigateToEdit" data-id="{{item.id}}"></image>
+              <image class="action-icon delete-icon" src="/images/icon_list_delete.png" bindtap="handleDelete" data-id="{{item.id}}"></image>
+            </view>
           </view>
         </view>
       </block>

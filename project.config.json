@@ -1,25 +1,55 @@
 {
-    "setting": {
-        "es6": true,
-        "postcss": true,
-        "minified": true,
-        "uglifyFileName": false,
-        "enhance": true,
-        "packNpmRelationList": [],
-        "babelSetting": {
-            "ignore": [],
-            "disablePlugins": [],
-            "outputPath": ""
-        },
-        "useCompilerPlugins": false,
-        "minifyWXML": true
+  "setting": {
+    "es6": true,
+    "postcss": true,
+    "minified": true,
+    "uglifyFileName": false,
+    "enhance": true,
+    "packNpmRelationList": [],
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
     },
-    "compileType": "miniprogram",
-    "simulatorPluginLibVersion": {},
-    "packOptions": {
-        "ignore": [],
-        "include": []
+    "useCompilerPlugins": false,
+    "minifyWXML": true,
+    "minifyWXSS": true,
+    "checkInvalidKey": true,
+    "checkSiteMap": true,
+    "uploadWithSourceMap": true,
+    "compileHotReLoad": false,
+    "useMultiFrameRuntime": true,
+    "useApiHook": true,
+    "useApiHostProcess": true,
+    "disableUseStrict": false,
+    "showShadowRootInWxmlPanel": true,
+    "scopeDataCheck": false,
+    "ignoreDevUnusedFiles": false,
+    "ignoreUploadUnusedFiles": true,
+    "checkAppSecretSwitch": false,
+    "useIsolateContext": true,
+    "userConfirmedBundleSwitch": false,
+    "packNpmManually": false,
+    "showES6CompileOption": false,
+    "debugOptions": {
+      "hidedInDevtools": [],
+      "showHeadInfo": false,
+      "showComponentHighlight": false,
+      "showBindingRangeHighlight": false
     },
-    "appid": "wxcc7a983e08605f2b",
-    "editorSetting": {}
+    "compileWorklet": false,
+    "localPlugins": false,
+    "condition": false,
+    "swc": false,
+    "disableSWC": true
+  },
+  "compileType": "miniprogram",
+  "simulatorPluginLibVersion": {},
+  "packOptions": {
+    "ignore": [],
+    "include": []
+  },
+  "appid": "wxcc7a983e08605f2b",
+  "editorSetting": {},
+  "libVersion": "3.9.0"
 }

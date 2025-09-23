@@ -1,0 +1,24 @@
+/* 全局样式 */
+
+/* 禁用点击高亮效果 */
+page,
+view,
+button,
+input,
+textarea,
+picker,
+switch,
+checkbox,
+radio,
+slider,
+image,
+text {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 禁用长按菜单 */
+view,
+text,
+image {
+  -webkit-touch-callout: none;
+}

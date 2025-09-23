@@ -39,6 +39,32 @@ Page({
     });
   },
 
+  // 输入框获取焦点时清除placeholder
+  handleFocus(e) {
+    const field = e.currentTarget.dataset.field;
+    // 如果当前字段为空，则清除placeholder
+    if (!this.data.formData[field]) {
+      this.setData({
+        [`formData.${field}`]: ''
+      });
+    }
+  },
+
+  // 处理输入框容器点击，聚焦到输入框
+  handleInputFocus(e) {
+    const field = e.currentTarget.dataset.field;
+    // 模拟点击输入框，触发聚焦
+    this.handleFocus({
+      currentTarget: {
+        dataset: {
+          field: field
+        }
+      }
+    });
+  },
+
+
+
   // 输入框变化处理
   handleInput(e) {
     const field = e.currentTarget.dataset.field;

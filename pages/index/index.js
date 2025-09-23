@@ -28,6 +28,8 @@ Page({
     this.loadCosmeticsData();
   },
 
+
+
   // 加载化妆品数据
   loadCosmeticsData() {
     const cosmetics = this.app.globalData.cosmetics;
@@ -82,6 +84,15 @@ Page({
       const isExpired = daysLeft < 0;
       const isTodayExpired = daysLeft === 0;
 
+      // 处理名称超过10个字符时显示省略号
+      let displayName = item.name;
+      if (displayName && displayName.length > 10) {
+        displayName = displayName.substring(0, 10) + '...';
+      }
+      
+      // 确保备注字段的一致性（兼容notes和remarks两种字段名）
+      const remarks = item.remarks || item.notes || '';
+
       let status;
       if (isExpired) {
         status = 'expired';
@@ -95,6 +106,8 @@ Page({
 
       return {
         ...item,
+        displayName,
+        remarks, // 添加统一的备注字段
         daysLeft,
         isExpired,
         isTodayExpired,
@@ -218,10 +231,44 @@ Page({
   // 输入框内容变化
   onInputChange(e) {
     const { field } = e.currentTarget.dataset;
-    const { value } = e.detail;
+    let { value } = e.detail;
+    
+    // 对备注字段进行字数限制
+    if (field === 'remarks' && value.length > 14) {
+      value = value.substring(0, 14);
+    }
+    
     this.setData({
       [`editForm.${field}`]: value
     });
+  },
+
+  // 输入框获取焦点时清除默认提示文字
+  handleFocus(e) {
+    const { field } = e.currentTarget.dataset;
+    if (!this.data.editForm[field]) {
+      this.setData({
+        [`editForm.${field}`]: ''
+      });
+    }
+  },
+
+  // 处理输入框容器点击，聚焦到输入框
+  handleInputFocus(e) {
+    const field = e.currentTarget.dataset.field;
+    // 模拟点击输入框，触发聚焦
+    this.handleFocus({
+      currentTarget: {
+        dataset: {
+          field: field
+        }
+      }
+    });
+  },
+
+  // 处理选择器容器点击，打开选择器
+  handlePickerTap(e) {
+    // 点击容器时，会自动触发内部picker的点击事件，无需额外处理
   },
 
   // 选择类别

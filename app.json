@@ -5,15 +5,17 @@
   ],
   "window": {
     "navigationBarTitleText": "妆妆记",
-    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarBackgroundColor": "#FFF6F7",
     "navigationBarTextStyle": "black",
-    "backgroundColor": "#f5f5f5"
+    "backgroundColor": "#FFF6F7"
   },
+  "debug": false,
+  "resizable": false,
   "tabBar": {
     "list": [
       {
         "pagePath": "pages/index/index",
-        "text": "我的化妆品",
+        "text": "化妆品",
         "iconPath": "images/icon_list.png",
         "selectedIconPath": "images/icon_list_selected.png"
       },
@@ -24,10 +26,11 @@
         "selectedIconPath": "images/icon_add_selected.png"
       }
     ],
-    "color": "#666666",
-    "selectedColor": "#ff6b6b",
+    "color": "#D0D0D0",
+    "selectedColor": "#333333",
     "backgroundColor": "#ffffff",
-    "borderStyle": "black"
+    "borderStyle": "black",
+    "height": "320rpx"
   },
   "permission": {
     "scope.camera": {
