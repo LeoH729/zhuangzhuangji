@@ -6,7 +6,7 @@ Page({
       id: '', // 化妆品ID
       name: '', // 化妆品名称
       categoryIndex: 0, // 类别索引
-      purchaseDate: '', // 购买日期
+      purchaseDate: '', // 开封日期
       expiryDate: '', // 过期日期
       notes: '', // 备注信息
       imageUrl: '' // 图片URL

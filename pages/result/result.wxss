@@ -1,0 +1,195 @@
+/* pages/result/result.wxss */
+.container {
+  padding: 32rpx;
+  padding-bottom: 200rpx; /* 为固定按钮预留空间 */
+  background-color: #FFF6F7;
+  min-height: 100vh;
+}
+
+/* 原图展示区 */
+.image-section {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 32rpx;
+}
+
+.original-image {
+  width: 400rpx;
+  height: 400rpx;
+  border-radius: 44rpx;
+  border: 1rpx solid #E1BFC3;
+  background-color: white;
+}
+
+/* 妆妆蛋资源点区域 */
+.points-section {
+  position: fixed;
+  top: 330rpx;
+  right: 16rpx;
+  z-index: 999;
+}
+
+.points-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.egg-icon {
+  width: 36rpx;
+  height: 36rpx;
+  margin-right: 8rpx;
+}
+
+.points-badge {
+  background-color: #f4c00c;
+  border-radius: 32rpx;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 8rpx 16rpx;
+  box-shadow: 0 4rpx 12rpx rgba(244, 192, 12, 0.3);
+}
+
+.points-number {
+  font-size: 32rpx;
+  color: #92404a;
+  font-weight: bold;
+}
+
+/* 分析区域通用样式 */
+.analysis-section {
+  margin-bottom: 32rpx;
+  border-radius: 32rpx;
+  border: 1rpx solid #F8ACB5;
+  background-color: white;
+  padding: 32rpx;
+}
+
+/* 优化建议区特殊样式 */
+.suggestions-section {
+  margin-bottom: 100rpx;
+}
+
+/* 区域行容器 - 左右分布 */
+.section-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 24rpx;
+}
+
+/* 区域标题 */
+.section-title {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333333;
+  flex-shrink: 0;
+  width: auto;
+}
+
+/* 区域内容 */
+.section-content {
+  font-size: 28rpx;
+  color: #666666;
+  line-height: 1.6;
+  text-align: justify;
+  flex: 1;
+}
+
+/* 生成妆容参考按钮 */
+.generate-btn {
+  position: fixed;
+  bottom: 80rpx;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 640rpx;
+  height: 96rpx;
+  border-radius: 48rpx;
+  background-color: #F8ACB5;
+  color: #333333;
+  font-size: 32rpx;
+  font-weight: bold;
+  border: none;
+  box-shadow: 0 4rpx 8rpx rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+
+/* 重置按钮默认样式 */
+.generate-btn::after {
+  border: none;
+}
+
+/* 按钮禁用样式 */
+.generate-btn.disabled {
+  background-color: #FFE4E7 !important;
+  color: #ffffff !important;
+}
+
+/* 全屏遮罩样式（与妆容页保持一致） */
+.analysis-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 9999;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.analysis-overlay.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.spinner {
+  width: 80rpx;
+  height: 80rpx;
+  border: 8rpx solid rgba(255, 255, 255, 0.3);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.overlay-text {
+  margin-top: 24rpx;
+  color: #ffffff;
+  font-size: 28rpx;
+}
+
+/* 复用妆容页的积分不足提示样式 */
+.insufficient-hint {
+  margin-top: 16rpx;
+  text-align: center;
+  color: #e97885;
+  font-size: 26rpx;
+}
+
+/* 固定定位到按钮下方 */
+.result-hint {
+  position: fixed;
+  bottom: 42rpx;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 640rpx;
+  z-index: 999;
+}

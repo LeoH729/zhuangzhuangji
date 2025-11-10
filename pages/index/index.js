@@ -20,29 +20,98 @@ Page({
       remarks: '',
       imageUrl: ''
     },
-    categories: ['护肤', '彩妆', '香水', '美发', '身体护理', '工具', '其他']
+    categories: ['护肤', '彩妆', '香水', '美发', '身体护理', '工具', '其他'],
+    userAuthorized: false, // 用户是否已授权登录
+    showReminderModal: false, // 提醒设置弹窗
+    selectedCosmetic: null, // 选中的化妆品
+    templateId: 'Bt7Mmwj4cz-klq4dBnp1EZ_L9ovLeZykyk5atwzcjgY' // 订阅消息模板ID
   },
 
   // 页面显示时执行
   onShow() {
-    this.loadCosmeticsData();
+    this.checkUserAuth();
+  },
+
+  // 检查用户授权状态
+  checkUserAuth() {
+    const app = getApp();
+    if (app.globalData.openid) {
+      this.setData({ userAuthorized: true });
+      this.loadCosmeticsData();
+    } else {
+      // 等待获取openid
+      setTimeout(() => {
+        this.checkUserAuth();
+      }, 1000);
+    }
+  },
+
+  // 用户登录授权
+  onUserLogin() {
+    wx.getUserProfile({
+      desc: '用于完善用户资料',
+      success: (res) => {
+        const app = getApp();
+        app.globalData.userInfo = res.userInfo;
+        this.setData({ userAuthorized: true });
+        this.loadCosmeticsData();
+      },
+      fail: (err) => {
+        console.error('用户拒绝授权:', err);
+        wx.showToast({
+          title: '需要授权才能使用',
+          icon: 'none'
+        });
+      }
+    });
   },
 
 
 
   // 加载化妆品数据
   loadCosmeticsData() {
-    const cosmetics = this.app.globalData.cosmetics;
-    // 处理数据，计算过期状态和剩余天数
-    const processedData = this.processCosmeticsData(cosmetics);
-    // 排序数据：未过期的按剩余天数从少到多，已过期的按创建时间从近到晚
-    const sortedData = this.sortCosmeticsData(processedData);
-    // 更新数据
-    this.setData({
-      cosmetics: sortedData,
-      totalCount: sortedData.length,
-      expiringCount: sortedData.filter(item => !item.isExpired && item.daysLeft <= this.data.reminderDays).length,
-      expiredCount: sortedData.filter(item => item.isExpired).length
+    this.setData({ isLoading: true });
+    
+    wx.cloud.callFunction({
+      name: 'cosmetics',
+      data: {
+        action: 'list'
+      },
+      success: (res) => {
+        if (res.result.success) {
+          const cosmetics = res.result.data;
+          // 处理数据，计算过期状态和剩余天数
+          const processedData = this.processCosmeticsData(cosmetics);
+          // 排序数据：未过期的按剩余天数从少到多，已过期的按创建时间从近到晚
+          const sortedData = this.sortCosmeticsData(processedData);
+          // 更新数据
+          this.setData({
+            cosmetics: sortedData,
+            totalCount: sortedData.length,
+            expiringCount: sortedData.filter(item => !item.isExpired && !item.isTodayExpired && item.daysLeft <= this.data.reminderDays).length,
+            expiredCount: sortedData.filter(item => item.isExpired).length,
+            isLoading: false
+          });
+          
+          // 同步到全局数据（保持兼容性）
+          this.app.globalData.cosmetics = cosmetics;
+        } else {
+          console.error('加载数据失败:', res.result.message);
+          wx.showToast({
+            title: '加载数据失败',
+            icon: 'none'
+          });
+          this.setData({ isLoading: false });
+        }
+      },
+      fail: (err) => {
+        console.error('调用云函数失败:', err);
+        wx.showToast({
+          title: '网络错误',
+          icon: 'none'
+        });
+        this.setData({ isLoading: false });
+      }
     });
   },
 
@@ -111,7 +180,8 @@ Page({
         daysLeft,
         isExpired,
         isTodayExpired,
-        status
+        status,
+        reminderEnabled: item.reminderEnabled || false // 添加提醒状态字段
       };
     });
   },
@@ -128,23 +198,41 @@ Page({
   // 删除化妆品
   handleDelete(e) {
     const id = e.currentTarget.dataset.id;
-    // 安全地阻止事件冒泡
-    if (e && typeof e.stopPropagation === 'function') {
-      e.stopPropagation();
-    }
-
+    const cosmetic = this.data.cosmetics.find(item => item._id === id);
+    
     wx.showModal({
       title: '确认删除',
-      content: '确定要删除这个化妆品记录吗？',
-      confirmColor: '#ff3b30',
+      content: `确定要删除 "${cosmetic.name}" 吗？`,
       success: (res) => {
         if (res.confirm) {
-          this.app.deleteCosmetic(id);
-          this.loadCosmeticsData();
-          wx.showToast({
-            title: '删除成功',
-            icon: 'success',
-            duration: 1500
+          wx.cloud.callFunction({
+            name: 'cosmetics',
+            data: {
+              action: 'delete',
+              data: { _id: id }
+            },
+            success: (res) => {
+              if (res.result.success) {
+                wx.showToast({
+                  title: '删除成功',
+                  icon: 'success'
+                });
+                // 重新加载数据
+                this.loadCosmeticsData();
+              } else {
+                wx.showToast({
+                  title: '删除失败',
+                  icon: 'none'
+                });
+              }
+            },
+            fail: (err) => {
+              console.error('删除失败:', err);
+              wx.showToast({
+                title: '网络错误',
+                icon: 'none'
+              });
+            }
           });
         }
       }
@@ -199,7 +287,7 @@ Page({
   // 打开编辑弹窗
   openEditModal(e) {
     const id = e.currentTarget.dataset.id;
-    const cosmetic = this.data.cosmetics.find(item => item.id === id);
+    const cosmetic = this.data.cosmetics.find(item => item._id === id);
     if (cosmetic) {
       // 找到当前类别在数组中的索引
       const categoryIndex = this.data.categories.findIndex(cat => cat === cosmetic.category);
@@ -207,7 +295,7 @@ Page({
       this.setData({
         currentCosmetic: cosmetic,
         editForm: {
-          id: cosmetic.id,
+          id: cosmetic._id,
           name: cosmetic.name,
           category: cosmetic.category,
           categoryIndex: categoryIndex >= 0 ? categoryIndex : 0,
@@ -280,7 +368,7 @@ Page({
     });
   },
 
-  // 选择购买日期
+  // 选择开封日期
   onPurchaseDateChange(e) {
     const { value } = e.detail;
     this.setData({
@@ -304,8 +392,48 @@ Page({
       sourceType: ['album', 'camera'],
       success: (res) => {
         const tempFilePath = res.tempFilePaths[0];
-        this.setData({
-          'editForm.imageUrl': tempFilePath
+        
+        // 显示上传进度
+        wx.showLoading({
+          title: '上传图片中...',
+          mask: true
+        });
+        
+        // 上传图片到云存储
+        const cloudPath = `cosmetics/${Date.now()}-${Math.random().toString(36).substr(2, 9)}.jpg`;
+        
+        wx.cloud.uploadFile({
+          cloudPath: cloudPath,
+          filePath: tempFilePath,
+          success: (uploadRes) => {
+            console.log('图片上传成功:', uploadRes.fileID);
+            // 设置云存储文件ID
+            this.setData({
+              'editForm.imageUrl': uploadRes.fileID
+            });
+            wx.hideLoading();
+            wx.showToast({
+              title: '图片上传成功',
+              icon: 'success',
+              duration: 1500
+            });
+          },
+          fail: (err) => {
+            console.error('图片上传失败:', err);
+            wx.hideLoading();
+            wx.showToast({
+              title: '图片上传失败',
+              icon: 'none',
+              duration: 2000
+            });
+          }
+        });
+      },
+      fail: (err) => {
+        console.error('选择图片失败:', err);
+        wx.showToast({
+          title: '选择图片失败',
+          icon: 'none'
         });
       }
     });
@@ -340,35 +468,307 @@ Page({
       return;
     }
 
-    // 更新数据
-    const updatedCosmetics = this.data.cosmetics.map(item => {
-      if (item.id === editForm.id) {
-        return {
-          ...item,
+    // 调用云函数更新数据
+    wx.cloud.callFunction({
+      name: 'cosmetics',
+      data: {
+        action: 'update',
+        data: {
+          _id: editForm.id,
           name: editForm.name,
           category: editForm.category,
           purchaseDate: editForm.purchaseDate,
           expiryDate: editForm.expiryDate,
           remarks: editForm.remarks,
-          imageUrl: editForm.imageUrl || item.imageUrl
-        };
+          imageUrl: editForm.imageUrl
+        }
+      },
+      success: (res) => {
+        if (res.result.success) {
+          wx.showToast({
+            title: '保存成功',
+            icon: 'success'
+          });
+          this.closeEditModal();
+          // 重新加载数据
+          this.loadCosmeticsData();
+        } else {
+          wx.showToast({
+            title: '保存失败',
+            icon: 'none'
+          });
+        }
+      },
+      fail: (err) => {
+        console.error('保存失败:', err);
+        wx.showToast({
+          title: '网络错误',
+          icon: 'none'
+        });
       }
-      return item;
     });
+  },
 
+  // 设置提醒
+  // 切换提醒状态
+  toggleReminder(e) {
+    const id = e.currentTarget.dataset.id;
+    const cosmetic = this.data.cosmetics.find(item => item._id === id);
+    
+    if (!cosmetic) return;
+    
+    // 只有在灰色状态（未开启提醒）时才调用订阅消息授权
+    if (!cosmetic.reminderEnabled) {
+      this.requestReminderSubscription(cosmetic);
+    } else {
+      // 如果已有提醒设置，显示确认弹窗
+      wx.showModal({
+        title: '确认关闭提醒',
+        content: `关闭提醒后，您将收不到"${cosmetic.name}"的到期提醒，是否确认关闭？`,
+        confirmText: '确认关闭',
+        cancelText: '取消',
+        success: (res) => {
+          if (res.confirm) {
+            // 用户确认关闭，执行取消提醒
+            this.cancelReminder(id, cosmetic);
+          }
+          // 用户取消则不执行任何操作
+        }
+      });
+    }
+  },
+
+  // 请求提醒订阅授权
+  requestReminderSubscription(cosmetic) {
+    const { templateId } = this.data;
+    
+    wx.requestSubscribeMessage({
+      tmplIds: [templateId],
+      success: (res) => {
+        if (res[templateId] === 'accept') {
+          // 用户同意授权，设置提醒
+          this.setReminderForCosmetic(cosmetic);
+        } else {
+          // 用户拒绝授权，保持灰色状态
+          wx.showToast({
+            title: '需要授权才能设置提醒',
+            icon: 'none'
+          });
+        }
+      },
+      fail: (err) => {
+        console.error('订阅消息授权失败:', err);
+        wx.showToast({
+          title: '授权失败',
+          icon: 'none'
+        });
+      }
+    });
+  },
+
+  // 为化妆品设置提醒
+  setReminderForCosmetic(cosmetic) {
+    // 计算提醒日期（过期日期前7天）
+    const expiryDate = new Date(cosmetic.expiryDate);
+    const reminderDate = new Date(expiryDate);
+    reminderDate.setDate(expiryDate.getDate() - 7);
+
+    // 只有当提醒日期在未来时才设置提醒
+    const now = new Date();
+    if (reminderDate > now) {
+      // 调用云函数设置提醒
+      wx.cloud.callFunction({
+        name: 'reminders',
+        data: {
+          action: 'add',
+          data: {
+            cosmeticId: cosmetic._id,
+            cosmeticName: cosmetic.name,
+            expiryDate: cosmetic.expiryDate,
+            reminderDate: reminderDate.toISOString().split('T')[0],
+            templateId: this.data.templateId
+          }
+        },
+        success: (res) => {
+          if (res.result.success) {
+            // 更新本地数据状态
+            const updatedCosmetics = this.data.cosmetics.map(item => {
+              if (item._id === cosmetic._id) {
+                return { ...item, reminderEnabled: true };
+              }
+              return item;
+            });
+            
+            this.setData({
+              cosmetics: updatedCosmetics
+            });
+            
+            wx.showToast({
+              title: '提醒设置成功',
+              icon: 'success'
+            });
+          } else {
+            wx.showToast({
+              title: '提醒设置失败',
+              icon: 'none'
+            });
+          }
+        },
+        fail: (err) => {
+          console.error('设置提醒失败:', err);
+          wx.showToast({
+            title: '网络错误',
+            icon: 'none'
+          });
+        }
+      });
+    } else {
+      wx.showToast({
+        title: '该化妆品已过期或即将过期，无需设置提醒',
+        icon: 'none'
+      });
+    }
+  },
+
+  // 取消提醒
+  cancelReminder(cosmeticId, cosmetic) {
+    console.log('取消提醒，化妆品ID:', cosmeticId);
+    wx.cloud.callFunction({
+      name: 'reminders',
+      data: {
+        action: 'cancel',
+        data: { cosmeticId: cosmeticId }
+      },
+      success: (res) => {
+        console.log('云函数返回结果:', res);
+        if (res.result && res.result.success) {
+          wx.showToast({
+            title: '已取消提醒',
+            icon: 'success'
+          });
+          // 更新本地数据
+          const updatedCosmetics = this.data.cosmetics.map(item => {
+            if (item._id === cosmeticId) {
+              return { ...item, reminderEnabled: false };
+            }
+            return item;
+          });
+          this.setData({ cosmetics: updatedCosmetics });
+        } else {
+          console.error('取消提醒失败，云函数返回:', res.result);
+          wx.showToast({
+            title: res.result?.message || '取消失败',
+            icon: 'none'
+          });
+        }
+      },
+      fail: (err) => {
+        console.error('取消提醒调用失败:', err);
+        wx.showToast({
+          title: '网络错误',
+          icon: 'none'
+        });
+      }
+    });
+  },
+
+  setReminder(e) {
+    const id = e.currentTarget.dataset.id;
+    const cosmetic = this.data.cosmetics.find(item => item._id === id);
+    
+    if (cosmetic) {
+      this.setData({
+        selectedCosmetic: cosmetic,
+        showReminderModal: true
+      });
+    }
+  },
+
+  // 关闭提醒弹窗
+  closeReminderModal() {
     this.setData({
-      cosmetics: updatedCosmetics
+      showReminderModal: false,
+      selectedCosmetic: null
     });
+  },
 
-    // 保存到应用数据
-    this.app.globalData.cosmetics = updatedCosmetics;
-    // 重新加载数据以更新状态
-    this.loadCosmeticsData();
+  // 请求订阅消息授权
+  requestSubscribeMessage() {
+    const { selectedCosmetic, templateId } = this.data;
+    
+    wx.requestSubscribeMessage({
+      tmplIds: [templateId],
+      success: (res) => {
+        if (res[templateId] === 'accept') {
+          // 用户同意授权，保存提醒设置
+          this.saveReminderSetting(selectedCosmetic);
+        } else {
+          wx.showToast({
+            title: '需要授权才能设置提醒',
+            icon: 'none'
+          });
+        }
+      },
+      fail: (err) => {
+        console.error('订阅消息授权失败:', err);
+        wx.showToast({
+          title: '授权失败',
+          icon: 'none'
+        });
+      }
+    });
+  },
 
-    this.closeEditModal();
-    wx.showToast({
-      title: '保存成功',
-      icon: 'success'
+  // 保存提醒设置
+  saveReminderSetting(cosmetic) {
+    // 计算提醒日期（过期前7天）
+    const expiryDate = new Date(cosmetic.expiryDate);
+    const reminderDate = new Date(expiryDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+    
+    const reminderData = {
+      cosmeticId: cosmetic._id,
+      cosmeticName: cosmetic.name,
+      templateId: this.data.templateId,
+      reminderDate: reminderDate.toISOString().split('T')[0],
+      expiryDate: cosmetic.expiryDate,
+      isActive: true
+    };
+
+    wx.cloud.callFunction({
+      name: 'reminders',
+      data: {
+        action: 'add',
+        data: reminderData
+      },
+      success: (res) => {
+        if (res.result.success) {
+          wx.showToast({
+            title: '提醒设置成功',
+            icon: 'success'
+          });
+          // 更新本地数据
+          const updatedCosmetics = this.data.cosmetics.map(item => {
+            if (item._id === cosmetic._id) {
+              return { ...item, reminderEnabled: true };
+            }
+            return item;
+          });
+          this.setData({ cosmetics: updatedCosmetics });
+          this.closeReminderModal();
+        } else {
+          wx.showToast({
+            title: '设置失败',
+            icon: 'none'
+          });
+        }
+      },
+      fail: (err) => {
+        console.error('设置提醒失败:', err);
+        wx.showToast({
+          title: '网络错误',
+          icon: 'none'
+        });
+      }
     });
   }
 });

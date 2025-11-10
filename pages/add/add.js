@@ -5,12 +5,12 @@ Page({
     formData: {
       name: '', // 化妆品名称
       categoryIndex: 0, // 类别索引
-      purchaseDate: '', // 购买日期
+      purchaseDate: '', // 开封日期
       expiryDate: '', // 过期日期
       notes: '', // 备注信息
       imageUrl: '' // 图片路径
     },
-    // 化妆品类别列表
+    // 类别选项
     categories: [
       { id: 0, name: '请选择类别' },
       { id: 1, name: '护肤' },
@@ -21,12 +21,14 @@ Page({
       { id: 6, name: '工具' },
       { id: 7, name: '其他' }
     ],
-    // 当前日期（用于日期选择器默认结束日期）
+    // 当前日期
     currentDate: '',
-    // 是否可以保存（表单验证）
+    // 是否可以保存
     canSave: false,
-    // 加载状态
-    isSaving: false
+    // 是否正在保存
+    isSaving: false,
+    // 订阅消息模板ID
+    templateId: 'Bt7Mmwj4cz-klq4dBnp1EZ_L9ovLeZykyk5atwzcjgY'
   },
 
   // 页面加载
@@ -103,16 +105,48 @@ Page({
   chooseImage() {
     wx.chooseImage({
       count: 1, // 最多选择1张图片
-      sizeType: ['original', 'compressed'], // 原图或压缩图
+      sizeType: ['compressed'], // 使用压缩图以减少上传时间
       sourceType: ['album', 'camera'], // 相册或相机
       success: (res) => {
         // 获取临时文件路径
-        const tempFilePaths = res.tempFilePaths;
-        // 设置图片URL
-        this.setData({
-          'formData.imageUrl': tempFilePaths[0]
-        }, () => {
-          this.checkFormValidity();
+        const tempFilePath = res.tempFilePaths[0];
+        
+        // 显示上传进度
+        wx.showLoading({
+          title: '上传图片中...',
+          mask: true
+        });
+        
+        // 上传图片到云存储
+        const cloudPath = `cosmetics/${Date.now()}-${Math.random().toString(36).substr(2, 9)}.jpg`;
+        
+        wx.cloud.uploadFile({
+          cloudPath: cloudPath,
+          filePath: tempFilePath,
+          success: (uploadRes) => {
+            console.log('图片上传成功:', uploadRes.fileID);
+            // 设置云存储文件ID
+            this.setData({
+              'formData.imageUrl': uploadRes.fileID
+            }, () => {
+              this.checkFormValidity();
+              wx.hideLoading();
+              wx.showToast({
+                title: '图片上传成功',
+                icon: 'success',
+                duration: 1500
+              });
+            });
+          },
+          fail: (err) => {
+            console.error('图片上传失败:', err);
+            wx.hideLoading();
+            wx.showToast({
+              title: '图片上传失败',
+              icon: 'none',
+              duration: 2000
+            });
+          }
         });
       },
       fail: (err) => {
@@ -151,46 +185,153 @@ Page({
       category: this.data.categories[this.data.formData.categoryIndex].name,
       purchaseDate: this.data.formData.purchaseDate,
       expiryDate: this.data.formData.expiryDate,
-      notes: this.data.formData.notes.trim(),
+      remarks: this.data.formData.notes.trim(),
       imageUrl: this.data.formData.imageUrl
     };
 
-    // 调用应用实例的添加方法
-    const newCosmetic = this.app.addCosmetic(cosmetic);
+    // 先请求订阅消息授权（必须在用户点击事件中直接调用）
+    const { templateId } = this.data;
+    
+    wx.requestSubscribeMessage({
+      tmplIds: [templateId],
+      success: (res) => {
+        console.log('订阅消息授权结果:', res);
+        // 无论授权结果如何，都继续保存化妆品
+        this.saveCosmeticData(cosmetic, res[templateId] === 'accept');
+      },
+      fail: (err) => {
+        console.error('订阅消息授权失败:', err);
+        // 授权失败，仍然保存化妆品，但不设置提醒
+        this.saveCosmeticData(cosmetic, false);
+      }
+    });
+  },
 
-    if (newCosmetic) {
-      // 保存成功
-      wx.showToast({
-        title: '添加成功',
-        icon: 'success',
-        duration: 1500,
-        success: () => {
-          // 重置表单数据
-          this.setData({
-            formData: {
-              name: '',
-              categoryIndex: 0,
-              purchaseDate: '',
-              expiryDate: '',
-              notes: '',
-              imageUrl: ''
-            },
-            canSave: false
+  // 保存化妆品数据
+  saveCosmeticData(cosmetic, shouldSetReminder) {
+    // 调用云函数添加数据
+    wx.cloud.callFunction({
+      name: 'cosmetics',
+      data: {
+        action: 'add',
+        data: cosmetic
+      },
+      success: (res) => {
+        if (res.result.success) {
+          if (shouldSetReminder) {
+            // 用户同意授权，设置提醒
+            this.setReminderForCosmetic(res.result.data, cosmetic);
+          } else {
+            // 用户拒绝授权或授权失败，仍然显示添加成功
+            this.showSuccessAndReturn();
+          }
+        } else {
+          // 保存失败
+          wx.showToast({
+            title: '保存失败，请重试',
+            icon: 'none'
           });
-          // 返回上一页
-          setTimeout(() => {
-            wx.navigateBack();
-          }, 1500);
+          this.setData({ isSaving: false });
+        }
+      },
+      fail: (err) => {
+        console.error('添加失败:', err);
+        wx.showToast({
+          title: '网络错误',
+          icon: 'none'
+        });
+        this.setData({ isSaving: false });
+      }
+    });
+  },
+
+  // 为化妆品设置提醒
+  // 为化妆品设置提醒
+  setReminderForCosmetic(savedCosmetic, cosmeticData) {
+    // 计算提醒日期（过期日期前7天）
+    const expiryDate = new Date(cosmeticData.expiryDate);
+    const reminderDate = new Date(expiryDate);
+    reminderDate.setDate(expiryDate.getDate() - 7);
+
+    // 只有当提醒日期在未来时才设置提醒
+    const now = new Date();
+    if (reminderDate > now) {
+      // 调用云函数设置提醒
+      wx.cloud.callFunction({
+        name: 'reminders',
+        data: {
+          action: 'add',
+          data: {
+            cosmeticId: savedCosmetic._id,
+            cosmeticName: cosmeticData.name,
+            expiryDate: cosmeticData.expiryDate,
+            reminderDate: reminderDate.toISOString().split('T')[0],
+            templateId: this.data.templateId // 添加模板ID
+          }
+        },
+        success: (res) => {
+          if (res.result.success) {
+            console.log('提醒设置成功');
+            wx.showToast({
+              title: '添加成功，已设置过期提醒',
+              icon: 'success',
+              duration: 2000
+            });
+          } else {
+            console.error('提醒设置失败:', res.result.error);
+            wx.showToast({
+              title: '添加成功，但提醒设置失败',
+              icon: 'none',
+              duration: 2000
+            });
+          }
+          this.resetFormAndReturn();
+        },
+        fail: (err) => {
+          console.error('提醒设置调用失败:', err);
+          wx.showToast({
+            title: '添加成功，但提醒设置失败',
+            icon: 'none',
+            duration: 2000
+          });
+          this.resetFormAndReturn();
         }
       });
     } else {
-      // 保存失败
-      wx.showToast({
-        title: '保存失败，请重试',
-        icon: 'none'
-      });
-      this.setData({ isSaving: false });
+      // 提醒日期已过，直接显示成功
+      this.showSuccessAndReturn();
     }
+  },
+
+  // 显示成功提示并返回
+  showSuccessAndReturn() {
+    wx.showToast({
+      title: '添加成功',
+      icon: 'success',
+      duration: 1500
+    });
+    this.resetFormAndReturn();
+  },
+
+  // 重置表单并返回
+  resetFormAndReturn() {
+    // 重置表单数据
+    this.setData({
+      formData: {
+        name: '',
+        categoryIndex: 0,
+        purchaseDate: '',
+        expiryDate: '',
+        notes: '',
+        imageUrl: ''
+      },
+      canSave: false,
+      isSaving: false
+    });
+    // 返回上一页
+    setTimeout(() => {
+      wx.navigateBack();
+    }, 1500);
   },
 
   // 页面卸载时检查是否有未保存数据

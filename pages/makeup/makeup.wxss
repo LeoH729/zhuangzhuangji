@@ -1,0 +1,244 @@
+/* pages/makeup/makeup.wxss */
+.container {
+  padding: 0;
+  background-color: #FFF6F7;
+  min-height: 100vh;
+}
+
+/* 顶部banner区域 */
+.banner-section {
+  padding: 32rpx 32rpx 0 32rpx;
+  margin-bottom: 48rpx;
+}
+
+.banner-image {
+  width: 100%;
+  height: 250rpx;
+  border-radius: 20rpx;
+}
+
+/* 图片上传区域 */
+.upload-section {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 48rpx;
+}
+
+.upload-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.upload-container {
+  width: 320rpx;
+  height: 320rpx;
+  background-color: #ffffff;
+  border: 1rpx solid #e1bfc3;
+  border-radius: 44rpx;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 未上传状态 */
+.upload-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.add-icon {
+  width: 96rpx;
+  height: 96rpx;
+}
+
+.upload-text-wrapper {
+  margin-top: 24rpx;
+}
+
+.upload-text {
+  color: #e97885;
+  font-size: 28rpx;
+  text-align: center;
+}
+
+/* 已上传状态 */
+.uploaded-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.uploaded-image {
+  width: 100%;
+  height: 100%;
+  border-radius: 44rpx;
+}
+
+.delete-btn {
+  position: absolute;
+  top: 24rpx;
+  right: 24rpx;
+  width: 36rpx;
+  height: 36rpx;
+  border: none;
+  background: none;
+  padding: 1rpx;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.delete-icon {
+  width: 34rpx;
+  height: 34rpx;
+  pointer-events: none;
+}
+
+/* 妆妆蛋资源点区域 */
+.points-section {
+  position: fixed;
+  top: 330rpx;
+  right: 16rpx;
+  z-index: 999;
+}
+
+.points-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.egg-icon {
+  width: 36rpx;
+  height: 36rpx;
+  margin-right: 8rpx;
+}
+
+.points-badge {
+  background-color: #f4c00c;
+  border-radius: 32rpx;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 8rpx 16rpx;
+  box-shadow: 0 4rpx 12rpx rgba(244, 192, 12, 0.3);
+}
+
+.points-number {
+  font-size: 32rpx;
+  color: #92404a;
+  font-weight: bold;
+}
+
+/* 小贴士区域 */
+.tips-section {
+  margin: 0 0 48rpx 0;
+  display: flex;
+  justify-content: center;
+}
+
+.tips-image {
+  width: 686rpx;
+  height: 272rpx;
+}
+
+/* 立即分析按钮 */
+.analyze-section {
+  margin: 0 32rpx;
+}
+
+.analyze-btn {
+  width: 100%;
+  height: 96rpx;
+  border-radius: 48rpx;
+  border: none;
+  font-size: 32rpx;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 按钮状态 */
+.analyze-btn.disabled {
+  background-color: #FFE4E7 !important;
+  color: #ffffff !important;
+  background: #FFE4E7 !important;
+}
+
+.analyze-btn.disabled::after {
+  border: none !important;
+  background: none !important;
+}
+
+.analyze-btn.active {
+  background-color: #f8acb5;
+  color: #333333;
+}
+
+/* 重置按钮默认样式 */
+.analyze-btn::after {
+  border: none;
+}
+
+/* 积分不足提示文案 */
+.insufficient-hint {
+  margin-top: 16rpx;
+  text-align: center;
+  color: #e97885;
+  font-size: 26rpx;
+}
+
+/* 全屏加载遮罩层 */
+.analysis-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 9999;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.analysis-overlay.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.spinner {
+  width: 80rpx;
+  height: 80rpx;
+  border: 8rpx solid rgba(255, 255, 255, 0.3);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.overlay-text {
+  margin-top: 24rpx;
+  color: #ffffff;
+  font-size: 28rpx;
+}
