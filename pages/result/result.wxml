@@ -1,0 +1,76 @@
+<!--pages/result/result.wxml-->
+<view class="container">
+  <!-- 原图展示区 -->
+  <view class="image-section">
+    <image class="original-image" src="{{originalImage}}" mode="aspectFill"></image>
+  </view>
+
+  <!-- 妆妆蛋资源点区域 -->
+  <view class="points-section">
+    <view class="points-container">
+      <view class="points-badge">
+        <image class="egg-icon" src="/images/icon_zzj_egg.svg" mode="aspectFit"></image>
+        <text class="points-number">{{points}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 面容模块 -->
+  <view class="analysis-section">
+    <view class="section-row">
+      <view class="section-title">面容</view>
+      <view class="section-content">{{analysisResult.face}}</view>
+    </view>
+  </view>
+
+  <!-- 皮肤模块 -->
+  <view class="analysis-section">
+    <view class="section-row">
+      <view class="section-title">皮肤</view>
+      <view class="section-content">{{analysisResult.skin}}</view>
+    </view>
+  </view>
+
+  <!-- 妆容模块 -->
+  <view class="analysis-section">
+    <view class="section-row">
+      <view class="section-title">妆容</view>
+      <view class="section-content">{{analysisResult.makeup}}</view>
+    </view>
+  </view>
+
+  <!-- 发型模块 -->
+  <view class="analysis-section">
+    <view class="section-row">
+      <view class="section-title">发型</view>
+      <view class="section-content">{{analysisResult.hairstyle}}</view>
+    </view>
+  </view>
+
+  <!-- 建议模块 -->
+  <view class="analysis-section suggestions-section">
+    <view class="section-row">
+      <view class="section-title">建议</view>
+      <view class="section-content">{{analysisResult.suggestions}}</view>
+    </view>
+  </view>
+
+  <!-- 生成妆容参考按钮 -->
+  <button class="generate-btn {{(points < generateCost) ? 'disabled' : ''}}" bindtap="generateMakeupReference" disabled="{{overlayVisible || points < generateCost}}">
+    生成妆容参考（消耗{{generateCost}}点）
+  </button>
+  <!-- 妆妆蛋不足提示（复用样式） -->
+  <view wx:if="{{points < generateCost}}" class="insufficient-hint result-hint">当前妆妆蛋不足，请先进行充值哦！</view>
+
+  <!-- 全屏加载遮罩层（生成参考图） -->
+  <view 
+    class="analysis-overlay {{overlayVisible ? 'show' : ''}}" 
+    catchtouchmove="preventTouchMove" 
+    catchtap="blockTap"
+  >
+    <view class="overlay-content">
+      <view class="spinner"></view>
+      <text class="overlay-text">努力生成中，请稍后！</text>
+    </view>
+  </view>
+</view>

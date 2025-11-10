@@ -32,12 +32,12 @@
       </view>
     </view>
 
-    <!-- 购买日期 -->
+    <!-- 开封日期 -->
     <view class="form-item">
-      <text class="form-label">购买日期</text>
+      <text class="form-label">开封日期</text>
       <view class="input-container">
         <picker class="form-picker" mode="date" value="{{formData.purchaseDate}}" start="2000-01-01" end="{{currentDate}}" bindchange="handleDateChange" data-field="purchaseDate">
-          <view class="picker-text {{!formData.purchaseDate ? 'placeholder-style' : ''}}">{{formData.purchaseDate || '请选择购买日期'}}</view>
+          <view class="picker-text {{!formData.purchaseDate ? 'placeholder-style' : ''}}">{{formData.purchaseDate || '请选择开封日期'}}</view>
         </picker>
       </view>
     </view>
@@ -67,6 +67,6 @@
 
   <!-- 保存按钮 -->
   <view class="btn-container">
-    <button class="save-btn" bindtap="saveCosmetic" disabled="{{!canSave}}">保存化妆品</button>
+    <button class="save-btn" catchtap="saveCosmetic" disabled="{{!canSave}}">保存化妆品</button>
   </view>
 </view>

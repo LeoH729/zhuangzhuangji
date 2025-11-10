@@ -33,12 +33,12 @@
       </view>
     </view>
 
-    <!-- 购买日期 -->
+    <!-- 开封日期 -->
     <view class="form-item">
-      <text class="form-label">购买日期</text>
-      <view class="input-container">
+      <text class="form-label">开封日期</text>
+      <view class="form-input">
         <picker class="form-picker" mode="date" value="{{formData.purchaseDate}}" start="2000-01-01" end="{{currentDate}}" bindchange="handleDateChange" data-field="purchaseDate">
-          <view class="picker-text {{!formData.purchaseDate ? 'placeholder-style' : ''}}">{{formData.purchaseDate || '请选择购买日期'}}</view>
+          <view class="picker-text {{!formData.purchaseDate ? 'placeholder-style' : ''}}">{{formData.purchaseDate || '请选择开封日期'}}</view>
         </picker>
       </view>
     </view>

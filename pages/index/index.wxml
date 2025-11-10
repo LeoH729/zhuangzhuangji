@@ -57,12 +57,12 @@
           </view>
         </view>
 
-        <!-- 购买日期 -->
+        <!-- 开封日期 -->
         <view class="form-item">
-          <text class="form-label">购买日期</text>
+          <text class="form-label">开封日期</text>
           <view class="input-container">
             <picker class="form-picker" mode="date" value="{{editForm.purchaseDate}}" start="2000-01-01" end="{{currentDate}}" bindchange="onPurchaseDateChange" data-field="purchaseDate">
-              <view class="picker-text {{!editForm.purchaseDate ? 'placeholder-style' : ''}}">{{editForm.purchaseDate || '请选择购买日期'}}</view>
+              <view class="picker-text {{!editForm.purchaseDate ? 'placeholder-style' : ''}}">{{editForm.purchaseDate || '请选择开封日期'}}</view>
             </picker>
           </view>
         </view>
@@ -134,11 +134,23 @@
 
           <!-- 化妆品信息 -->
           <view class="item-right">
-            <view class="item-name">{{item.displayName || item.name}}</view>
+            <view class="item-name-container">
+              <text class="item-name">{{item.displayName || item.name}}</text>
+              <image wx:if="{{!item.isExpired && item.reminderEnabled}}" 
+                     class="reminder-bell-icon" 
+                     src="/images/icon_reminder_opening.svg" 
+                     bindtap="toggleReminder" 
+                     data-id="{{item._id}}"></image>
+              <image wx:elif="{{!item.isExpired && !item.reminderEnabled}}" 
+                     class="reminder-bell-icon" 
+                     src="/images/icon_reminder_closed.svg" 
+                     bindtap="toggleReminder" 
+                     data-id="{{item._id}}"></image>
+            </view>
             <view class="item-category">{{item.category}}</view>
             <view class="item-details">
               <view class="detail-item">
-                <text class="detail-label">购买日期：</text>
+                <text class="detail-label">开封日期：</text>
                 <text class="detail-value">{{item.purchaseDate || '未设置'}}</text>
               </view>
               <view class="detail-item">
@@ -153,12 +165,32 @@
             
             <!-- 操作按钮 -->
             <view class="item-actions">
-              <image class="action-icon edit-icon" src="/images/icon_list_edit.png" bindtap="navigateToEdit" data-id="{{item.id}}"></image>
-              <image class="action-icon delete-icon" src="/images/icon_list_delete.png" bindtap="handleDelete" data-id="{{item.id}}"></image>
+              <image class="action-icon edit-icon" src="/images/icon_list_edit.svg" bindtap="openEditModal" data-id="{{item._id}}"></image>
+              <image class="action-icon delete-icon" src="/images/icon_list_delete.svg" bindtap="handleDelete" data-id="{{item._id}}"></image>
             </view>
           </view>
         </view>
       </block>
+    </view>
+  </view>
+
+  <!-- 提醒设置弹窗 -->
+  <view class="modal-mask" wx:if="{{showReminderModal}}" bindtap="closeReminderModal"></view>
+  <view class="modal-container reminder-modal" wx:if="{{showReminderModal}}">
+    <view class="modal-header">
+      <text class="modal-title">设置过期提醒</text>
+      <view class="modal-close" bindtap="closeReminderModal"></view>
+    </view>
+    <view class="modal-content">
+      <view class="reminder-info">
+        <text class="cosmetic-name">{{selectedCosmetic.name}}</text>
+        <text class="expiry-info">过期日期：{{selectedCosmetic.expiryDate}}</text>
+        <text class="reminder-desc">将在过期前7天提醒您</text>
+      </view>
+      <view class="modal-actions">
+        <button class="cancel-btn" bindtap="closeReminderModal">取消</button>
+        <button class="confirm-btn" catchtap="requestSubscribeMessage">确认设置</button>
+      </view>
     </view>
   </view>
 </view>

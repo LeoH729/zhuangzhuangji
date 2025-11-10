@@ -1,0 +1,73 @@
+<!--pages/makeup/makeup.wxml-->
+<view class="container">
+  <!-- 顶部banner区域 -->
+  <view class="banner-section">
+    <image class="banner-image" src="/images/img_zr_banner001.png" mode="aspectFill"></image>
+  </view>
+
+  <!-- 图片上传区域 -->
+  <view class="upload-section">
+    <view class="upload-wrapper">
+      <view class="upload-container" bindtap="chooseImage">
+        <!-- 未上传状态 -->
+        <view wx:if="{{!imageUrl}}" class="upload-placeholder">
+          <image class="add-icon" src="/images/icon_zr_add.svg" mode="aspectFit"></image>
+        </view>
+        
+        <!-- 已上传状态 -->
+        <view wx:else class="uploaded-container">
+          <image class="uploaded-image" src="{{imageUrl}}" mode="aspectFill"></image>
+          <view class="delete-btn" catchtap="deleteImage">
+            <image class="delete-icon" src="/images/icon_zr_delete.svg" mode="aspectFit"></image>
+          </view>
+        </view>
+      </view>
+      <!-- 文字移到白色区域下方 -->
+      <view wx:if="{{!imageUrl}}" class="upload-text-wrapper">
+        <text class="upload-text">点击上传照片分析妆容</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 妆妆蛋资源点区域 -->
+  <view class="points-section">
+    <view class="points-container">
+      <view class="points-badge">
+        <image class="egg-icon" src="/images/icon_zzj_egg.svg" mode="aspectFit"></image>
+        <text class="points-number">{{points}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 小贴士区域 -->
+  <view class="tips-section">
+    <image class="tips-image" src="/images/img_zr_tips.png" mode="aspectFit"></image>
+  </view>
+
+  <!-- 立即分析按钮 -->
+  <view class="analyze-section">
+    <button 
+      class="analyze-btn {{(imageUrl && points >= analyzeCost) ? 'active' : 'disabled'}}" 
+      bindtap="analyzeImage"
+      disabled="{{!imageUrl || points < analyzeCost}}"
+    >
+      立即分析（消耗{{analyzeCost}}点）
+    </button>
+    <!-- 积分不足提示 -->
+    <view wx:if="{{points < analyzeCost}}" class="insufficient-hint">
+      当前妆妆蛋不足，请先进行充值哦！
+    </view>
+  </view>
+
+  <!-- 全屏加载遮罩层 -->
+  <view 
+    class="analysis-overlay {{overlayVisible ? 'show' : ''}}" 
+    catchtouchmove="preventTouchMove" 
+    catchtap="blockTap"
+  >
+    <view class="overlay-content">
+      <view class="spinner"></view>
+      <text class="overlay-text">正在分析中，请稍候...</text>
+    </view>
+  </view>
+</view>

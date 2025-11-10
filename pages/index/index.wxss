@@ -454,7 +454,7 @@
 .cosmetic-item {
   display: flex;
   flex-direction: row;
-  padding: 32rpx 32rpx 24rpx 32rpx;
+  padding: 32rpx 32rpx 32rpx 32rpx;
   margin-bottom: 32rpx;
   background-color: #FFF;
   border-radius: 48rpx;
@@ -585,15 +585,31 @@
   align-self: stretch;
 }
 
+/* 产品名称容器 */
+.item-name-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8rpx;
+  width: 100%;
+}
+
 .item-name {
   font-size: 32rpx;
   font-weight: 600;
   color: #333333;
-  margin-bottom: 8rpx;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  width: 100%;
+  flex: 1;
+  margin-right: 16rpx;
+}
+
+/* 提醒铃铛图标 */
+.reminder-bell-icon {
+  width: 114rpx;
+  height: 60rpx;
+  flex-shrink: 0;
 }
 
 .item-category {
