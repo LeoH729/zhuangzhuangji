@@ -21,7 +21,6 @@ Page({
       imageUrl: ''
     },
     categories: ['护肤', '彩妆', '香水', '美发', '身体护理', '工具', '其他'],
-    userAuthorized: false, // 用户是否已授权登录
     showReminderModal: false, // 提醒设置弹窗
     selectedCosmetic: null, // 选中的化妆品
     templateId: 'Bt7Mmwj4cz-klq4dBnp1EZ_L9ovLeZykyk5atwzcjgY', // 订阅消息模板ID
@@ -33,71 +32,12 @@ Page({
     this.checkUserAuth();
   },
 
-  // 检查用户授权状态
+  // 加载数据（不再依赖昵称/头像授权）
   checkUserAuth() {
-    try {
-      const userInfo = wx.getStorageSync('userInfo');
-      console.log('检查用户授权状态:', userInfo);
-      
-      if (userInfo && userInfo.openid) {
-        console.log('用户已授权，openid:', userInfo.openid);
-        this.setData({ userAuthorized: true });
-        this.loadCosmeticsData();
-      } else {
-        console.log('用户未授权或openid不存在');
-        this.setData({ 
-          userAuthorized: false,
-          cosmetics: [],
-          showFloatingButton: false
-        });
-      }
-    } catch (error) {
-      console.error('检查用户授权状态失败:', error);
-      this.setData({ 
-        userAuthorized: false,
-        cosmetics: [],
-        showFloatingButton: false
-      });
-    }
+    this.loadCosmeticsData();
   },
 
-  // 用户登录授权
-  onUserLogin() {
-    wx.getUserProfile({
-      desc: '用于完善会员资料',
-      success: (res) => {
-        console.log('用户授权成功', res);
-        
-        // 获取用户openid并保存用户信息
-        wx.cloud.callFunction({
-          name: 'login',
-          success: (loginRes) => {
-            const userInfo = {
-              openid: loginRes.result.openid,
-              nickName: res.userInfo.nickName,
-              avatarUrl: res.userInfo.avatarUrl,
-              loginTime: new Date().getTime()
-            };
-            
-            try {
-              wx.setStorageSync('userInfo', userInfo);
-              this.setData({ userAuthorized: true });
-              this.loadCosmeticsData();
-              console.log('用户信息已保存，开始加载数据');
-            } catch (error) {
-              console.error('保存用户信息失败:', error);
-            }
-          },
-          fail: (err) => {
-            console.error('获取openid失败:', err);
-          }
-        });
-      },
-      fail: (err) => {
-        console.log('用户拒绝授权', err);
-      }
-    });
-  },
+  // 移除昵称/头像授权流程（保留云函数依赖的 openid 自动识别）
 
   // 加载化妆品数据
   loadCosmeticsData() {

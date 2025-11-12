@@ -242,3 +242,21 @@
   color: #ffffff;
   font-size: 28rpx;
 }
+
+/* 管理员入口按钮样式 */
+.admin-btn {
+  margin-top: 20rpx;
+  width: 100%;
+  height: 88rpx;
+  border-radius: 44rpx;
+  border: none;
+  font-size: 30rpx;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #e1bfc3;
+  color: #333333;
+}
+
+.admin-btn::after { border: none; }

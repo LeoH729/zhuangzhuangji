@@ -12,7 +12,13 @@ Page({
     isUploading: false, // 图片上传状态
     uploadedFileId: '', // 云存储fileID
     uploadedTempFileUrl: '', // 云存储临时URL
-    overlayVisible: false // 全屏遮罩显示状态
+    overlayVisible: false, // 全屏遮罩显示状态
+    isAdmin: false, // 管理员身份标识
+    // 新增：妆妆蛋资源点区域显示控制（默认显示）
+    showPointsSection: true,
+    // 新增：云端运营图片（默认本地兜底，可后续删除本地资源）
+    bannerImageUrl: '/images/img_zr_banner001.png',
+    tipsImageUrl: '/images/img_zr_tips.png'
   },
 
   /**
@@ -41,7 +47,11 @@ Page({
 
     // 读取配置（如存在），否则主动请求
     if (app.globalData && app.globalData.pointsConfig) {
-      this.setData({ analyzeCost: app.globalData.pointsConfig.analyze_cost || 3 });
+      const cfgAc = app.globalData.pointsConfig.analyze_cost;
+      const show = (typeof app.globalData.pointsConfig.show_points_section === 'number')
+        ? (app.globalData.pointsConfig.show_points_section > 0)
+        : true;
+      this.setData({ analyzeCost: (typeof cfgAc === 'number') ? cfgAc : 3, showPointsSection: show });
     } else {
       this.loadPointsConfig();
     }
@@ -53,6 +63,140 @@ Page({
     }
     // 开启配置实时监听
     this.startConfigWatcher();
+
+    // 加载与监听云端运营图片
+    this.loadAssetsConfig();
+    this.startAssetsWatcher();
+
+    // 同步管理员身份
+    const isAdminStored = wx.getStorageSync('isAdmin')
+    const isAdminGlobal = app.globalData && app.globalData.isAdmin
+    this.setData({ isAdmin: !!(isAdminGlobal || isAdminStored) })
+    // 若暂未鉴权完成，稍后再同步一次
+    setTimeout(() => {
+      const isAdminLater = (getApp().globalData && getApp().globalData.isAdmin) || wx.getStorageSync('isAdmin')
+      if (typeof isAdminLater === 'boolean' && isAdminLater !== this.data.isAdmin) {
+        this.setData({ isAdmin: isAdminLater })
+      }
+    }, 800)
+  },
+
+  // —— 云端图片解析辅助：fileID -> 临时URL，或直接返回HTTP(S) ——
+  async resolveAssetUrl(maybeUrlOrFileId) {
+    try {
+      if (!maybeUrlOrFileId || typeof maybeUrlOrFileId !== 'string') return '';
+      if (/^https?:\/\//i.test(maybeUrlOrFileId)) return maybeUrlOrFileId; // 直接URL
+      if (/^cloud:\/\//i.test(maybeUrlOrFileId)) {
+        const res = await wx.cloud.getTempFileURL({ fileList: [maybeUrlOrFileId] });
+        const item = res && res.fileList && res.fileList[0];
+        return (item && item.tempFileURL) || '';
+      }
+      return maybeUrlOrFileId; // 其他情况按URL处理
+    } catch (e) {
+      console.warn('解析云端图片失败', e);
+      return '';
+    }
+  },
+
+  // —— 读取云端运营图片配置（assets_config/global） ——
+  async loadAssetsConfig() {
+    try {
+      const db = wx.cloud.database();
+      const coll = db.collection('assets_config');
+      let data;
+      try {
+        const doc = await coll.doc('global').get();
+        data = doc && doc.data;
+      } catch (errDoc) {
+        console.warn('assets_config doc("global") 读取失败，尝试集合兜底', errDoc);
+        try {
+          const list = await coll.limit(1).get();
+          data = list && list.data && list.data[0];
+        } catch (errList) {
+          console.warn('assets_config 集合兜底读取失败', errList);
+        }
+      }
+      if (data) {
+        // 支持多命名：*_url / *_fileid / *
+        const bannerRaw = data.makeup_banner_url || data.makeup_banner_fileid || data.makeup_banner || '';
+        const tipsRaw = data.makeup_tips_url || data.makeup_tips_fileid || data.makeup_tips || '';
+        const [banner, tips] = await Promise.all([
+          this.resolveAssetUrl(bannerRaw),
+          this.resolveAssetUrl(tipsRaw)
+        ]);
+        const patch = {};
+        if (banner) patch.bannerImageUrl = banner;
+        if (tips) patch.tipsImageUrl = tips;
+        if (Object.keys(patch).length) this.setData(patch);
+      }
+    } catch (e) {
+      console.warn('加载云端运营图片失败（assets_config）', e);
+    }
+  },
+
+  // —— 运营图片实时监听 ——
+  startAssetsWatcher() {
+    try {
+      if (this._assetsWatcher && this._assetsWatcher.close) {
+        try { this._assetsWatcher.close(); } catch (_) {}
+      }
+      const db = wx.cloud.database();
+      const coll = db.collection('assets_config');
+      this._assetsWatcher = coll.doc('global').watch({
+        onChange: async snapshot => {
+          const doc = (snapshot && snapshot.docs && snapshot.docs[0]) || null;
+          if (doc) {
+            const bannerRaw = doc.makeup_banner_url || doc.makeup_banner_fileid || doc.makeup_banner || '';
+            const tipsRaw = doc.makeup_tips_url || doc.makeup_tips_fileid || doc.makeup_tips || '';
+            const [banner, tips] = await Promise.all([
+              this.resolveAssetUrl(bannerRaw),
+              this.resolveAssetUrl(tipsRaw)
+            ]);
+            const patch = {};
+            if (banner && banner !== this.data.bannerImageUrl) patch.bannerImageUrl = banner;
+            if (tips && tips !== this.data.tipsImageUrl) patch.tipsImageUrl = tips;
+            if (Object.keys(patch).length) this.setData(patch);
+          }
+        },
+        onError: err => {
+          console.error('makeup 运营图片监听错误（doc global），尝试集合监听兜底', err);
+          // 集合监听兜底：当不存在 global 文档或无权限时，监听整个集合
+          try {
+            if (this._assetsWatcher && this._assetsWatcher.close) {
+              try { this._assetsWatcher.close(); } catch (_) {}
+            }
+            this._assetsWatcher = coll.where({}).watch({
+              onChange: async snap => {
+                const d = (snap && snap.docs && snap.docs[0]) || null;
+                if (d) {
+                  const bannerRaw = d.makeup_banner_url || d.makeup_banner_fileid || d.makeup_banner || '';
+                  const tipsRaw = d.makeup_tips_url || d.makeup_tips_fileid || d.makeup_tips || '';
+                  const [banner, tips] = await Promise.all([
+                    this.resolveAssetUrl(bannerRaw),
+                    this.resolveAssetUrl(tipsRaw)
+                  ]);
+                  const patch = {};
+                  if (banner && banner !== this.data.bannerImageUrl) patch.bannerImageUrl = banner;
+                  if (tips && tips !== this.data.tipsImageUrl) patch.tipsImageUrl = tips;
+                  if (Object.keys(patch).length) this.setData(patch);
+                }
+              },
+              onError: e2 => console.error('makeup 集合监听兜底失败', e2)
+            });
+          } catch (e2) {
+            console.error('makeup 启动集合监听兜底异常', e2);
+          }
+        }
+      });
+    } catch (e) {
+      console.error('makeup 开启运营图片监听失败', e);
+    }
+  },
+  stopAssetsWatcher() {
+    if (this._assetsWatcher && this._assetsWatcher.close) {
+      try { this._assetsWatcher.close(); } catch (_) {}
+      this._assetsWatcher = null;
+    }
   },
 
   // 读取运营配置（analyze_cost）
@@ -60,18 +204,29 @@ Page({
     try {
       const app = getApp();
       if (app.globalData && app.globalData.pointsConfig) {
-        this.setData({ analyzeCost: app.globalData.pointsConfig.analyze_cost || 3 });
+        const ac = app.globalData.pointsConfig.analyze_cost;
+        const show = (typeof app.globalData.pointsConfig.show_points_section === 'number')
+          ? (app.globalData.pointsConfig.show_points_section > 0)
+          : true;
+        this.setData({ analyzeCost: (typeof ac === 'number') ? ac : 3, showPointsSection: show });
         return;
       }
       const cfgRes = await wx.cloud.callFunction({ name: 'points', data: { action: 'getConfig' } });
       if (cfgRes.result && cfgRes.result.success) {
         const cfg = cfgRes.result.data;
-        this.setData({ analyzeCost: cfg.analyze_cost || 3 });
+        const ac2 = cfg.analyze_cost;
+        const show2 = (typeof cfg.show_points_section === 'number') ? (cfg.show_points_section > 0) : true;
+        this.setData({ analyzeCost: (typeof ac2 === 'number') ? ac2 : 3, showPointsSection: show2 });
         if (app.globalData) app.globalData.pointsConfig = cfg;
       }
     } catch (e) {
       console.warn('加载配置失败，使用默认 analyzeCost', e);
     }
+  },
+
+  // 管理员入口导航
+  goAdminPage() {
+    wx.navigateTo({ url: '/pages/admin/admin' })
   },
 
   /**
@@ -613,6 +768,7 @@ Page({
   onUnload() {
     this.stopPointsWatcher();
     this.stopConfigWatcher();
+    this.stopAssetsWatcher();
   },
 
   /**
@@ -648,16 +804,44 @@ Page({
         },
         onError: err => {
           console.error('makeup 积分监听错误', err);
+          // 监听失败时降级为轮询，避免登录失败导致数据不同步
+          this.startPointsPolling();
         }
       });
     } catch (e) {
       console.error('makeup 开启积分监听失败', e);
+      // 初始化失败同样降级
+      this.startPointsPolling();
     }
   },
   stopPointsWatcher() {
     if (this._pointsWatcher && this._pointsWatcher.close) {
       try { this._pointsWatcher.close(); } catch (_) {}
       this._pointsWatcher = null;
+    }
+    this.stopPointsPolling();
+  },
+
+  // —— 积分轮询降级 ——
+  startPointsPolling() {
+    if (this._pointsPollingTimer) return;
+    // 每10秒拉取一次用户积分
+    this._pointsPollingTimer = setInterval(async () => {
+      try {
+        const res = await wx.cloud.callFunction({ name: 'points', data: { action: 'getUserPoints' } });
+        if (res.result && res.result.success) {
+          const pts = res.result.data && res.result.data.points;
+          if (typeof pts === 'number' && pts !== this.data.points) {
+            this.setData({ points: pts });
+          }
+        }
+      } catch (_) { /* 静默失败，下一轮继续 */ }
+    }, 10000);
+  },
+  stopPointsPolling() {
+    if (this._pointsPollingTimer) {
+      try { clearInterval(this._pointsPollingTimer); } catch (_) {}
+      this._pointsPollingTimer = null;
     }
   },
 
@@ -674,7 +858,8 @@ Page({
           const doc = (snapshot && snapshot.docs && snapshot.docs[0]) || null;
           if (doc) {
             const ac = (typeof doc.analyze_cost === 'number') ? doc.analyze_cost : this.data.analyzeCost;
-            this.setData({ analyzeCost: ac });
+            const show = (typeof doc.show_points_section === 'number') ? (doc.show_points_section > 0) : this.data.showPointsSection;
+            this.setData({ analyzeCost: ac, showPointsSection: show });
           }
         },
         onError: err => {
@@ -713,8 +898,9 @@ Page({
         if (cfgRes.result && cfgRes.result.success) {
           const cfg = cfgRes.result.data;
           const ac = (typeof cfg.analyze_cost === 'number') ? cfg.analyze_cost : this.data.analyzeCost;
-          if (ac !== this.data.analyzeCost) {
-            this.setData({ analyzeCost: ac });
+          const show = (typeof cfg.show_points_section === 'number') ? (cfg.show_points_section > 0) : this.data.showPointsSection;
+          if (ac !== this.data.analyzeCost || show !== this.data.showPointsSection) {
+            this.setData({ analyzeCost: ac, showPointsSection: show });
           }
           if (app.globalData) app.globalData.pointsConfig = cfg;
         }

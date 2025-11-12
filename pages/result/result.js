@@ -9,20 +9,18 @@ Page({
     
     // 妆妆蛋资源点数量
     points: 0,
+    // 新增：妆妆蛋资源点区域显示控制（默认显示）
+    showPointsSection: true,
     
     // 分析结果数据（预留接口字段）
     analysisResult: {
-      // 面容分析
-      face: '面容：脸型为椭圆形，轮廓线条柔和，面部比例协调。五官中等大小适宜，眼睛大小适中，眼神舒缓，眉形自然，鼻梁挺直，嘴唇饱满，整体面部特征协调统一。',
+      
       
       // 皮肤分析
       skin: '优点：肌肤底色干净，原生状态好，无明显大瑕疵；缺点：存在少量暗沉，色泽沉着及小瑕疵，肤色均匀度欠佳。',
       
       // 妆容分析
       makeup: '优点：整体为自然裸妆感，底妆轻薄贴合，保留肌肤真实质感，呈现干净清爽的状态，高级感与不做作，缺点：缺饰修饰眼妆，缺乏遮瑕，眼部无强化，精致度不足。',
-      
-      // 发型分析
-      hairstyle: '优点：黑色长发自然顺滑，发质看起来健康有光泽，能很好托面部轮廓，传达温柔亲和气质；缺点：设计简单，缺乏层次感与造型感，风格单调，时尚表现力不足。',
       
       // 优化建议
       suggestions: '25-30岁女性可适度提升妆教，保留自然底妆用轻薄粉底液进行遮瑕，局部提亮；眼妆选择大地色系，眼影设计大地色眼影及棕睫毛膏及眼线，唇妆选择'
@@ -56,10 +54,8 @@ Page({
           // 将数据映射到页面展示结构
           this.setData({
             analysisResult: {
-              face: data.face || '',
               skin: data.skin || '',
               makeup: data.makeup || '',
-              hairstyle: data.hairstyle || '',
               suggestions: data.suggestions || ''
             }
           });
@@ -78,10 +74,8 @@ Page({
           // 数据映射到页面展示结构
           this.setData({
             analysisResult: {
-              face: data.face || '',
               skin: data.skin || '',
               makeup: data.makeup || '',
-              hairstyle: data.hairstyle || '',
               suggestions: data.suggestions || ''
             },
             imagePrompt: data.imagePrompt || '',
@@ -264,13 +258,19 @@ Page({
     try {
       const app = getApp();
       if (app.globalData && app.globalData.pointsConfig) {
-        this.setData({ generateCost: app.globalData.pointsConfig.generate_cost || 5 });
+        const gc0 = app.globalData.pointsConfig.generate_cost;
+        const show0 = (typeof app.globalData.pointsConfig.show_points_section === 'number')
+          ? (app.globalData.pointsConfig.show_points_section > 0)
+          : true;
+        this.setData({ generateCost: (typeof gc0 === 'number') ? gc0 : 5, showPointsSection: show0 });
         return;
       }
       const cfgRes = await wx.cloud.callFunction({ name: 'points', data: { action: 'getConfig' } });
       if (cfgRes.result && cfgRes.result.success) {
         const cfg = cfgRes.result.data;
-        this.setData({ generateCost: cfg.generate_cost || 5 });
+        const gc1 = cfg.generate_cost;
+        const show1 = (typeof cfg.show_points_section === 'number') ? (cfg.show_points_section > 0) : true;
+        this.setData({ generateCost: (typeof gc1 === 'number') ? gc1 : 5, showPointsSection: show1 });
         if (app.globalData) app.globalData.pointsConfig = cfg;
       }
     } catch (e) {
@@ -297,10 +297,13 @@ Page({
         },
         onError: err => {
           console.error('result 积分监听错误', err);
+          // 监听失败时降级为轮询
+          this.startPointsPolling();
         }
       });
     } catch (e) {
       console.error('result 开启积分监听失败', e);
+      this.startPointsPolling();
     }
   },
   stopPointsWatcher() {
@@ -308,6 +311,7 @@ Page({
       try { this._pointsWatcher.close(); } catch (_) {}
       this._pointsWatcher = null;
     }
+    this.stopPointsPolling();
   },
 
   /**
@@ -332,6 +336,28 @@ Page({
     // });
   },
 
+  // —— 积分轮询降级 ——
+  startPointsPolling() {
+    if (this._pointsPollingTimer) return;
+    this._pointsPollingTimer = setInterval(async () => {
+      try {
+        const res = await wx.cloud.callFunction({ name: 'points', data: { action: 'getUserPoints' } });
+        if (res.result && res.result.success) {
+          const pts = res.result.data && res.result.data.points;
+          if (typeof pts === 'number' && pts !== this.data.points) {
+            this.setData({ points: pts });
+          }
+        }
+      } catch (_) { /* 静默失败，下一轮继续 */ }
+    }, 10000);
+  },
+  stopPointsPolling() {
+    if (this._pointsPollingTimer) {
+      try { clearInterval(this._pointsPollingTimer); } catch (_) {}
+      this._pointsPollingTimer = null;
+    }
+  },
+
   // 删除旧的generateMakeupReference实现（已在前文替换为异步工作流调用版）
 
   // —— 配置实时监听（points_config/global） ——
@@ -347,9 +373,8 @@ Page({
           const doc = (snapshot && snapshot.docs && snapshot.docs[0]) || null;
           if (doc) {
             const gc = (typeof doc.generate_cost === 'number') ? doc.generate_cost : this.data.generateCost;
-            if (gc !== this.data.generateCost) {
-              this.setData({ generateCost: gc });
-            }
+            const show = (typeof doc.show_points_section === 'number') ? (doc.show_points_section > 0) : this.data.showPointsSection;
+            this.setData({ generateCost: gc, showPointsSection: show });
           }
         },
         onError: err => {
@@ -388,8 +413,9 @@ Page({
         if (cfgRes.result && cfgRes.result.success) {
           const cfg = cfgRes.result.data;
           const gc = (typeof cfg.generate_cost === 'number') ? cfg.generate_cost : this.data.generateCost;
-          if (gc !== this.data.generateCost) {
-            this.setData({ generateCost: gc });
+          const show = (typeof cfg.show_points_section === 'number') ? (cfg.show_points_section > 0) : this.data.showPointsSection;
+          if (gc !== this.data.generateCost || show !== this.data.showPointsSection) {
+            this.setData({ generateCost: gc, showPointsSection: show });
           }
           if (app.globalData) app.globalData.pointsConfig = cfg;
         }
