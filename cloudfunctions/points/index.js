@@ -43,6 +43,8 @@ async function defaultConfig() {
     initial_points: 100,
     analyze_cost: 3,
     generate_cost: 5,
+    // 新增：控制前端妆妆蛋资源点区域显示（0 不显示，1 显示）
+    show_points_section: 1,
     updatedAt: new Date()
   }
 }

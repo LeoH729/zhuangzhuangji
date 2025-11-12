@@ -98,24 +98,8 @@
 
   <!-- 列表区域 -->
   <view class="list-container {{cosmetics.length > 0 ? 'has-data' : 'empty'}}">
-    <!-- 用户未授权状态 -->
-    <view wx:if="{{!userAuthorized}}" class="auth-container">
-      <view class="auth-content">
-        <view class="auth-illustration">
-          <image src="/images/empty.png" class="illustration-img" mode="aspectFit"></image>
-        </view>
-        <view class="auth-text">
-          <text class="auth-title">欢迎使用化妆品管理</text>
-          <text class="auth-desc">请先登录以同步您的化妆品数据</text>
-        </view>
-        <button class="auth-btn" bindtap="onUserLogin">
-          <text class="btn-text">立即登录</text>
-        </button>
-      </view>
-    </view>
-
     <!-- 空状态 -->
-    <view wx:elif="{{userAuthorized && cosmetics.length === 0}}" class="empty-state">
+    <view wx:if="{{cosmetics.length === 0}}" class="empty-state">
       <view class="empty-content">
         <view class="cosmetic-illustration">
            <image src="/images/empty.png" class="illustration-img" mode="aspectFit"></image>
@@ -128,7 +112,7 @@
     </view>
 
     <!-- 化妆品列表 -->
-    <view wx:elif="{{userAuthorized && cosmetics.length > 0}}" class="cosmetic-list">
+    <view wx:elif="{{cosmetics.length > 0}}" class="cosmetic-list">
       <block wx:for="{{cosmetics}}" wx:key="id">
         <view class="cosmetic-item">
           <view class="item-left">

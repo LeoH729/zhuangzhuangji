@@ -34,6 +34,18 @@
 - 部署：右键“上传并部署（云端安装依赖）”，选择环境 `cloudbase-5gmfinom29f48930`
 
 #### cozeWorkflow 云函数（代理扣子工作流）
+
+#### admin 云函数（管理员身份鉴权）
+
+- 作用：在云端依据 `OPENID` 判断当前用户是否为管理员，不在客户端暴露管理员的 openid。
+- 入口：`cloudfunctions/admin/index.js`
+- 使用：小程序端调用 `wx.cloud.callFunction({ name: 'admin', data: { action: 'isAdmin' } })`，返回 `{ success: true, isAdmin: boolean }`。
+- 管理员 openid：已在云函数内硬编码（仅存在云端代码），当前为 `obLo_1_UleSf8eX83HwIT_GGq8mA`。如需变更，请修改云函数并重新上传部署。
+
+部署步骤（微信开发者工具）：
+- 打开“云开发”面板，选择环境。
+- 在“云函数”列表中选择 `admin`，点击“上传并部署（所有文件）”。
+- 部署成功后，重启/预览小程序即可生效。
 - 路径: `cloudfunctions/cozeWorkflow/`
 - 功能: 从 `app_config/secrets` 读取 `coze_api_key` 与 `workflow_ids` 映射，代替前端请求调用 Coze 工作流接口，统一超时与错误处理
 - 依赖: wx-server-sdk, axios

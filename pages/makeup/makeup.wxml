@@ -2,7 +2,7 @@
 <view class="container">
   <!-- 顶部banner区域 -->
   <view class="banner-section">
-    <image class="banner-image" src="/images/img_zr_banner001.png" mode="aspectFill"></image>
+    <image class="banner-image" src="{{bannerImageUrl}}" mode="aspectFill"></image>
   </view>
 
   <!-- 图片上传区域 -->
@@ -29,8 +29,8 @@
     </view>
   </view>
 
-  <!-- 妆妆蛋资源点区域 -->
-  <view class="points-section">
+  <!-- 妆妆蛋资源点区域（可运营开关） -->
+  <view class="points-section" wx:if="{{showPointsSection}}">
     <view class="points-container">
       <view class="points-badge">
         <image class="egg-icon" src="/images/icon_zzj_egg.svg" mode="aspectFit"></image>
@@ -41,7 +41,7 @@
 
   <!-- 小贴士区域 -->
   <view class="tips-section">
-    <image class="tips-image" src="/images/img_zr_tips.png" mode="aspectFit"></image>
+    <image class="tips-image" src="{{tipsImageUrl}}" mode="aspectFit"></image>
   </view>
 
   <!-- 立即分析按钮 -->
@@ -51,12 +51,21 @@
       bindtap="analyzeImage"
       disabled="{{!imageUrl || points < analyzeCost}}"
     >
-      立即分析（消耗{{analyzeCost}}点）
+      立即分析<text wx:if="{{analyzeCost > 0}}">（消耗{{analyzeCost}}点）</text>
     </button>
     <!-- 积分不足提示 -->
     <view wx:if="{{points < analyzeCost}}" class="insufficient-hint">
       当前妆妆蛋不足，请先进行充值哦！
     </view>
+
+    <!-- 管理员入口按钮（仅管理员显示） -->
+    <button
+      wx:if="{{isAdmin}}"
+      class="admin-btn"
+      bindtap="goAdminPage"
+    >
+      管理员入口
+    </button>
   </view>
 
   <!-- 全屏加载遮罩层 -->

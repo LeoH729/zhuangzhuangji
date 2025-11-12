@@ -81,11 +81,64 @@ function parseWorkflowResponse(result) {
   }
 
   try {
-    // 如果是字符串，按JSON解析；如果已经是对象，直接返回
+    // 优先解析为对象
+    let payload;
     if (typeof raw === 'string') {
-      return JSON.parse(raw);
+      payload = JSON.parse(raw);
+    } else if (typeof raw === 'object' && raw && typeof raw.data === 'string') {
+      // 某些返回会再包一层 { data: '...json...' }
+      payload = JSON.parse(raw.data);
+    } else {
+      payload = raw;
     }
-    return raw;
+
+    // 规范化输出：尽最大可能提取图片URL并补充到常用字段
+    const isUrl = (val) => typeof val === 'string' && /^https?:\/\//.test(val);
+    const pickFromObj = (obj) => {
+      if (!obj || typeof obj !== 'object') return '';
+      // 常见一层字段
+      const directKeys = ['output', 'image', 'url', 'image_url', 'reference_image', 'result_url'];
+      for (const k of directKeys) {
+        if (isUrl(obj[k])) return obj[k];
+      }
+      // 可能的数组字段
+      const arrayKeys = ['images', 'urls', 'outputs', 'files', 'attachments', 'pictures'];
+      for (const k of arrayKeys) {
+        const arr = obj[k];
+        if (Array.isArray(arr)) {
+          // outputs 可能是对象数组
+          for (const item of arr) {
+            if (isUrl(item)) return item;
+            if (item && typeof item === 'object') {
+              const candidates = ['value', 'url', 'image', 'image_url'];
+              for (const ck of candidates) {
+                if (isUrl(item[ck])) return item[ck];
+              }
+            }
+          }
+        }
+      }
+      // 深层 result/data
+      if (obj.result && typeof obj.result === 'object') {
+        const r = pickFromObj(obj.result);
+        if (isUrl(r)) return r;
+      }
+      if (obj.data && typeof obj.data === 'object') {
+        const d = pickFromObj(obj.data);
+        if (isUrl(d)) return d;
+      }
+      return '';
+    };
+
+    const imageUrl = pickFromObj(payload);
+    if (isUrl(imageUrl)) {
+      // 不覆盖已有字段，仅补充缺失的常用键，便于调用方兜底
+      if (!payload.image) payload.image = imageUrl;
+      if (!payload.url) payload.url = imageUrl;
+      if (!payload.output) payload.output = imageUrl;
+    }
+
+    return payload;
   } catch (error) {
     console.error('解析工作流返回数据失败:', error, raw);
     throw new Error('解析工作流返回数据失败');

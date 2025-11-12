@@ -17,8 +17,8 @@
     <view class="image-label">参考图</view>
   </view>
 
-  <!-- 妆妆蛋资源点区域 -->
-  <view class="points-section">
+  <!-- 妆妆蛋资源点区域（可运营开关） -->
+  <view class="points-section" wx:if="{{showPointsSection}}">
     <view class="points-container">
       <view class="points-badge">
         <image class="egg-icon" src="/images/icon_zzj_egg.svg" mode="aspectFit"></image>

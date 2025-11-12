@@ -17,7 +17,9 @@ App({
       analyze_cost: 3,
       generate_cost: 5
     },
-    _pointsWatcher: null
+    _pointsWatcher: null,
+    // 管理员标识（由云函数鉴权）
+    isAdmin: false
   },
 
   // 应用初始化
@@ -38,7 +40,8 @@ App({
     
     // 初始化云开发环境
     wx.cloud.init({
-      env: 'cloudbase-5gmfinom29f48930', // 您的云开发环境ID
+      // 使用动态当前环境，避免本地环境ID与控制台绑定不一致导致登录失败
+      env: wx.cloud.DYNAMIC_CURRENT_ENV,
       traceUser: true
     });
     
@@ -90,11 +93,29 @@ App({
 
         // 初始化妆妆蛋积分系统
         this.initPointsSystem();
+
+        // 管理员身份校验（云端判断，不暴露openid）
+        this.checkAdminRole();
       },
       fail: err => {
         console.error('获取openid失败:', err);
       }
     });
+  },
+
+  // 管理员身份校验：由云函数在云端判断
+  async checkAdminRole() {
+    try {
+      const res = await wx.cloud.callFunction({ name: 'admin', data: { action: 'isAdmin' } })
+      const isAdmin = !!(res && res.result && res.result.isAdmin)
+      this.globalData.isAdmin = isAdmin
+      wx.setStorageSync('isAdmin', isAdmin)
+      console.log('管理员身份：', isAdmin)
+    } catch (e) {
+      console.warn('管理员鉴权失败，按普通用户处理', e)
+      this.globalData.isAdmin = false
+      wx.setStorageSync('isAdmin', false)
+    }
   },
 
   // 初始化妆妆蛋积分系统：加载配置与用户积分，并开启监听
@@ -141,10 +162,14 @@ App({
         },
         onError: err => {
           console.error('用户积分监听错误', err)
+          // 监听登录失败（如 -420002），降级为定时轮询，避免界面报错刷屏
+          this.startPointsPolling()
         }
       })
     } catch (e) {
       console.error('开启积分监听失败', e)
+      // 初始化失败同样降级为轮询
+      this.startPointsPolling()
     }
   },
 
@@ -153,6 +178,31 @@ App({
     if (this.globalData._pointsWatcher && this.globalData._pointsWatcher.close) {
       try { this.globalData._pointsWatcher.close() } catch (_) {}
       this.globalData._pointsWatcher = null
+    }
+    this.stopPointsPolling()
+  },
+
+  // —— 积分轮询降级 ——
+  startPointsPolling() {
+    try {
+      if (this.globalData._pointsPollingTimer) return
+      // 每 10 秒拉取一次最新积分，避免监听失败导致数据不更新
+      this.globalData._pointsPollingTimer = setInterval(async () => {
+        try {
+          const upRes = await wx.cloud.callFunction({ name: 'points', data: { action: 'getUserPoints' } })
+          const pts = (upRes && upRes.result && upRes.result.data && upRes.result.data.points)
+          if (typeof pts === 'number') {
+            this.globalData.userPoints = pts
+            wx.setStorageSync('userPoints', pts)
+          }
+        } catch (_) { /* 静默失败，下一次继续尝试 */ }
+      }, 10000)
+    } catch (_) {}
+  },
+  stopPointsPolling() {
+    if (this.globalData._pointsPollingTimer) {
+      try { clearInterval(this.globalData._pointsPollingTimer) } catch (_) {}
+      this.globalData._pointsPollingTimer = null
     }
   },
 

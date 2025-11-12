@@ -1,0 +1,26 @@
+<view class="container">
+  <view class="header">
+    <text class="title">管理员消息发布</text>
+    <text class="subtitle">仅做 UI 展示，暂不实现发布功能</text>
+  </view>
+
+  <view class="form">
+    <!-- 活动名称 -->
+    <text class="label">活动名称</text>
+    <input class="input" placeholder="请输入活动名称" bindinput="onNameChange"/>
+
+    <!-- 活动内容 -->
+    <text class="label">活动内容</text>
+    <textarea class="textarea" placeholder="请输入活动内容..." maxlength="1000" auto-height bindinput="onContentChange"/>
+
+    <!-- 跳转链接 -->
+    <text class="label">跳转链接</text>
+    <input class="input" placeholder="请输入跳转链接（可选）" bindinput="onLinkChange"/>
+
+    <button class="publish-btn" bindtap="onPublishTap">发布消息（UI占位）</button>
+  </view>
+
+  <view class="tips">
+    <text>说明：为安全起见，管理员身份在云端鉴权，客户端不暴露 openid。</text>
+  </view>
+</view>

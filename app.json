@@ -3,8 +3,10 @@
     "pages/makeup/makeup",
     "pages/cosmetics/cosmetics",
     "pages/add/add",
+    "pages/edit/edit",
     "pages/result/result",
-    "pages/reference/reference"
+    "pages/reference/reference",
+    "pages/admin/admin"
   ],
   "window": {
     "navigationBarTitleText": "妆妆记",
@@ -13,6 +15,7 @@
     "backgroundColor": "#FFF6F7"
   },
   "debug": false,
+  "lazyCodeLoading": "requiredComponents",
   "resizable": false,
   "tabBar": {
     "list": [

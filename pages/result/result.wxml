@@ -5,8 +5,8 @@
     <image class="original-image" src="{{originalImage}}" mode="aspectFill"></image>
   </view>
 
-  <!-- 妆妆蛋资源点区域 -->
-  <view class="points-section">
+  <!-- 妆妆蛋资源点区域（可运营开关） -->
+  <view class="points-section" wx:if="{{showPointsSection}}">
     <view class="points-container">
       <view class="points-badge">
         <image class="egg-icon" src="/images/icon_zzj_egg.svg" mode="aspectFit"></image>
@@ -15,13 +15,7 @@
     </view>
   </view>
 
-  <!-- 面容模块 -->
-  <view class="analysis-section">
-    <view class="section-row">
-      <view class="section-title">面容</view>
-      <view class="section-content">{{analysisResult.face}}</view>
-    </view>
-  </view>
+  
 
   <!-- 皮肤模块 -->
   <view class="analysis-section">
@@ -39,14 +33,6 @@
     </view>
   </view>
 
-  <!-- 发型模块 -->
-  <view class="analysis-section">
-    <view class="section-row">
-      <view class="section-title">发型</view>
-      <view class="section-content">{{analysisResult.hairstyle}}</view>
-    </view>
-  </view>
-
   <!-- 建议模块 -->
   <view class="analysis-section suggestions-section">
     <view class="section-row">
@@ -57,7 +43,7 @@
 
   <!-- 生成妆容参考按钮 -->
   <button class="generate-btn {{(points < generateCost) ? 'disabled' : ''}}" bindtap="generateMakeupReference" disabled="{{overlayVisible || points < generateCost}}">
-    生成妆容参考（消耗{{generateCost}}点）
+    生成妆容参考<text wx:if="{{generateCost > 0}}">（消耗{{generateCost}}点）</text>
   </button>
   <!-- 妆妆蛋不足提示（复用样式） -->
   <view wx:if="{{points < generateCost}}" class="insufficient-hint result-hint">当前妆妆蛋不足，请先进行充值哦！</view>

@@ -40,13 +40,26 @@
         "compileWorklet": false,
         "localPlugins": false,
         "condition": false,
-        "swc": false,
-        "disableSWC": true
+        "swc": true,
+        "disableSWC": false
     },
     "compileType": "miniprogram",
     "simulatorPluginLibVersion": {},
     "packOptions": {
-        "ignore": [],
+        "ignore": [
+
+            { "type": "glob", "value": "wx-subscribe-sdk/**" },
+            { "type": "glob", "value": "pages/index/**" },
+            { "type": "glob", "value": "docs/.accelerate/**" },
+            { "type": "file", "value": "docs/lottie_animation_reference.js" },
+            { "type": "file", "value": "README.md" },
+            { "type": "file", "value": "README_CLOUD_SETUP.md" },
+            { "type": "file", "value": "project.private.config.json" },
+            { "type": "file", "value": "package.json" },
+            { "type": "file", "value": "package-lock.json" },
+            { "type": "glob", "value": "cloudbase/**" },
+            { "type": "glob", "value": "cloudfunctions/**" }
+        ],
         "include": []
     },
     "appid": "wx2e1dbc56f270e910",
