@@ -14,9 +14,10 @@ App({
     pointsConfig: {
       name: '妆妆蛋',
       initial_points: 100,
-      analyze_cost: 3,
-      generate_cost: 5
+      analyze_cost: 0,
+      generate_cost: 0
     },
+    pointsConfigReady: false,
     _pointsWatcher: null,
     // 管理员标识（由云函数鉴权）
     isAdmin: false
@@ -125,6 +126,7 @@ App({
       const cfgRes = await wx.cloud.callFunction({ name: 'points', data: { action: 'getConfig' } })
       if (cfgRes.result && cfgRes.result.success) {
         this.globalData.pointsConfig = cfgRes.result.data
+        this.globalData.pointsConfigReady = true
       }
 
       // 确保用户积分文档存在并取最新值

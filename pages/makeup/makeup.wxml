@@ -1,8 +1,8 @@
 <!--pages/makeup/makeup.wxml-->
 <view class="container">
-  <!-- 顶部banner区域 -->
-  <view class="banner-section">
-    <image class="banner-image" src="{{bannerImageUrl}}" mode="aspectFill"></image>
+  <!-- 顶部banner区域（仅当云端提供时展示） -->
+  <view class="banner-section" wx:if="{{bannerImageUrl}}">
+    <image class="banner-image" src="{{bannerImageUrl}}" mode="aspectFill" lazy-load="true"></image>
   </view>
 
   <!-- 图片上传区域 -->
@@ -39,22 +39,22 @@
     </view>
   </view>
 
-  <!-- 小贴士区域 -->
-  <view class="tips-section">
-    <image class="tips-image" src="{{tipsImageUrl}}" mode="aspectFit"></image>
+  <!-- 小贴士区域（仅当云端提供时展示） -->
+  <view class="tips-section" wx:if="{{tipsImageUrl}}">
+    <image class="tips-image" src="{{tipsImageUrl}}" mode="aspectFit" lazy-load="true"></image>
   </view>
 
   <!-- 立即分析按钮 -->
   <view class="analyze-section">
     <button 
-      class="analyze-btn {{(imageUrl && points >= analyzeCost) ? 'active' : 'disabled'}}" 
+      class="analyze-btn {{(imageUrl && configAvailable && points >= analyzeCost) ? 'active' : 'disabled'}}" 
       bindtap="analyzeImage"
-      disabled="{{!imageUrl || points < analyzeCost}}"
+      disabled="{{!imageUrl || !configAvailable || points < analyzeCost}}"
     >
-      立即分析<text wx:if="{{analyzeCost > 0}}">（消耗{{analyzeCost}}点）</text>
+      立即分析<text wx:if="{{configAvailable && analyzeCost > 0}}">（消耗{{analyzeCost}}点）</text>
     </button>
     <!-- 积分不足提示 -->
-    <view wx:if="{{points < analyzeCost}}" class="insufficient-hint">
+    <view wx:if="{{configAvailable && points < analyzeCost}}" class="insufficient-hint">
       当前妆妆蛋不足，请先进行充值哦！
     </view>
 

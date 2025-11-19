@@ -42,11 +42,11 @@
   </view>
 
   <!-- 生成妆容参考按钮 -->
-  <button class="generate-btn {{(points < generateCost) ? 'disabled' : ''}}" bindtap="generateMakeupReference" disabled="{{overlayVisible || points < generateCost}}">
-    生成妆容参考<text wx:if="{{generateCost > 0}}">（消耗{{generateCost}}点）</text>
+  <button class="generate-btn {{(!configAvailable || points < generateCost) ? 'disabled' : ''}}" bindtap="generateMakeupReference" disabled="{{overlayVisible || !configAvailable || points < generateCost}}">
+    生成妆容参考<text wx:if="{{configAvailable && generateCost > 0}}">（消耗{{generateCost}}点）</text>
   </button>
   <!-- 妆妆蛋不足提示（复用样式） -->
-  <view wx:if="{{points < generateCost}}" class="insufficient-hint result-hint">当前妆妆蛋不足，请先进行充值哦！</view>
+  <view wx:if="{{configAvailable && points < generateCost}}" class="insufficient-hint result-hint">当前妆妆蛋不足，请先进行充值哦！</view>
 
   <!-- 全屏加载遮罩层（生成参考图） -->
   <view 

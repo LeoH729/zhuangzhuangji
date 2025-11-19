@@ -5,6 +5,8 @@
     "pages/add/add",
     "pages/edit/edit",
     "pages/result/result",
+    "pages/makeup-generating/makeup-generating",
+    "pages/analyzing/analyzing",
     "pages/reference/reference",
     "pages/admin/admin"
   ],
@@ -15,7 +17,6 @@
     "backgroundColor": "#FFF6F7"
   },
   "debug": false,
-  "lazyCodeLoading": "requiredComponents",
   "resizable": false,
   "tabBar": {
     "list": [
@@ -33,10 +34,11 @@
       }
     ],
     "color": "#D0D0D0",
-    "selectedColor": "#333333",
+    "selectedColor": "#F2909B",
     "backgroundColor": "#ffffff",
     "borderStyle": "white"
   },
+  "lazyCodeLoading": "requiredComponents",
   "permission": {
     "scope.camera": {
       "desc": "用于拍摄化妆品照片"

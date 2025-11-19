@@ -40,6 +40,13 @@ Page({
     } catch (e) {
       console.warn('参考图事件通道不可用', e)
     }
+    try {
+      const cached = wx.getStorageSync('referenceData')
+      if (cached && cached.referenceImage) {
+        this.setData({ referenceImage: cached.referenceImage })
+        wx.removeStorageSync('referenceData')
+      }
+    } catch (_) {}
     
     // 加载用户积分
     this.loadUserPoints()

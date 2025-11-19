@@ -8,7 +8,8 @@ Page({
   data: {
     imageUrl: '', // 上传的图片路径
     points: 0,   // 妆妆蛋资源点数量
-    analyzeCost: 3, // 每次分析消耗点数（可配置）
+    analyzeCost: 0, // 每次分析消耗点数（可配置）
+    configAvailable: true,
     isUploading: false, // 图片上传状态
     uploadedFileId: '', // 云存储fileID
     uploadedTempFileUrl: '', // 云存储临时URL
@@ -16,9 +17,11 @@ Page({
     isAdmin: false, // 管理员身份标识
     // 新增：妆妆蛋资源点区域显示控制（默认显示）
     showPointsSection: true,
-    // 新增：云端运营图片（默认本地兜底，可后续删除本地资源）
-    bannerImageUrl: '/images/img_zr_banner001.png',
-    tipsImageUrl: '/images/img_zr_tips.png'
+    // 云端运营图片（移除本地兜底，默认空，由云端下发）
+    bannerImageUrl: '',
+    tipsImageUrl: '',
+    bannerSourceRaw: '',
+    tipsSourceRaw: ''
   },
 
   /**
@@ -27,6 +30,7 @@ Page({
   onLoad(options) {
     // 初始化页面数据
     this.initializeData();
+    this._assetUrlCache = {};
   },
 
   /**
@@ -56,11 +60,7 @@ Page({
       this.loadPointsConfig();
     }
 
-    // 尝试开启监听；如果 openid 尚未就绪，稍后重试一次
     this.startPointsWatcher();
-    if (!(app.globalData && app.globalData.openid)) {
-      setTimeout(() => this.startPointsWatcher(), 600);
-    }
     // 开启配置实时监听
     this.startConfigWatcher();
 
@@ -87,9 +87,15 @@ Page({
       if (!maybeUrlOrFileId || typeof maybeUrlOrFileId !== 'string') return '';
       if (/^https?:\/\//i.test(maybeUrlOrFileId)) return maybeUrlOrFileId; // 直接URL
       if (/^cloud:\/\//i.test(maybeUrlOrFileId)) {
+        const cache = this._assetUrlCache && this._assetUrlCache[maybeUrlOrFileId];
+        if (cache) return cache;
         const res = await wx.cloud.getTempFileURL({ fileList: [maybeUrlOrFileId] });
         const item = res && res.fileList && res.fileList[0];
-        return (item && item.tempFileURL) || '';
+        const url = (item && item.tempFileURL) || '';
+        if (url) {
+          this._assetUrlCache[maybeUrlOrFileId] = url;
+        }
+        return url;
       }
       return maybeUrlOrFileId; // 其他情况按URL处理
     } catch (e) {
@@ -120,13 +126,21 @@ Page({
         // 支持多命名：*_url / *_fileid / *
         const bannerRaw = data.makeup_banner_url || data.makeup_banner_fileid || data.makeup_banner || '';
         const tipsRaw = data.makeup_tips_url || data.makeup_tips_fileid || data.makeup_tips || '';
-        const [banner, tips] = await Promise.all([
-          this.resolveAssetUrl(bannerRaw),
-          this.resolveAssetUrl(tipsRaw)
-        ]);
         const patch = {};
-        if (banner) patch.bannerImageUrl = banner;
-        if (tips) patch.tipsImageUrl = tips;
+        if (bannerRaw && bannerRaw !== this.data.bannerSourceRaw) {
+          const banner = await this.resolveAssetUrl(bannerRaw);
+          if (banner) {
+            patch.bannerImageUrl = banner;
+            patch.bannerSourceRaw = bannerRaw;
+          }
+        }
+        if (tipsRaw && tipsRaw !== this.data.tipsSourceRaw) {
+          const tips = await this.resolveAssetUrl(tipsRaw);
+          if (tips) {
+            patch.tipsImageUrl = tips;
+            patch.tipsSourceRaw = tipsRaw;
+          }
+        }
         if (Object.keys(patch).length) this.setData(patch);
       }
     } catch (e) {
@@ -148,13 +162,21 @@ Page({
           if (doc) {
             const bannerRaw = doc.makeup_banner_url || doc.makeup_banner_fileid || doc.makeup_banner || '';
             const tipsRaw = doc.makeup_tips_url || doc.makeup_tips_fileid || doc.makeup_tips || '';
-            const [banner, tips] = await Promise.all([
-              this.resolveAssetUrl(bannerRaw),
-              this.resolveAssetUrl(tipsRaw)
-            ]);
             const patch = {};
-            if (banner && banner !== this.data.bannerImageUrl) patch.bannerImageUrl = banner;
-            if (tips && tips !== this.data.tipsImageUrl) patch.tipsImageUrl = tips;
+            if (bannerRaw && bannerRaw !== this.data.bannerSourceRaw) {
+              const banner = await this.resolveAssetUrl(bannerRaw);
+              if (banner) {
+                patch.bannerImageUrl = banner;
+                patch.bannerSourceRaw = bannerRaw;
+              }
+            }
+            if (tipsRaw && tipsRaw !== this.data.tipsSourceRaw) {
+              const tips = await this.resolveAssetUrl(tipsRaw);
+              if (tips) {
+                patch.tipsImageUrl = tips;
+                patch.tipsSourceRaw = tipsRaw;
+              }
+            }
             if (Object.keys(patch).length) this.setData(patch);
           }
         },
@@ -171,13 +193,21 @@ Page({
                 if (d) {
                   const bannerRaw = d.makeup_banner_url || d.makeup_banner_fileid || d.makeup_banner || '';
                   const tipsRaw = d.makeup_tips_url || d.makeup_tips_fileid || d.makeup_tips || '';
-                  const [banner, tips] = await Promise.all([
-                    this.resolveAssetUrl(bannerRaw),
-                    this.resolveAssetUrl(tipsRaw)
-                  ]);
                   const patch = {};
-                  if (banner && banner !== this.data.bannerImageUrl) patch.bannerImageUrl = banner;
-                  if (tips && tips !== this.data.tipsImageUrl) patch.tipsImageUrl = tips;
+                  if (bannerRaw && bannerRaw !== this.data.bannerSourceRaw) {
+                    const banner = await this.resolveAssetUrl(bannerRaw);
+                    if (banner) {
+                      patch.bannerImageUrl = banner;
+                      patch.bannerSourceRaw = bannerRaw;
+                    }
+                  }
+                  if (tipsRaw && tipsRaw !== this.data.tipsSourceRaw) {
+                    const tips = await this.resolveAssetUrl(tipsRaw);
+                    if (tips) {
+                      patch.tipsImageUrl = tips;
+                      patch.tipsSourceRaw = tipsRaw;
+                    }
+                  }
                   if (Object.keys(patch).length) this.setData(patch);
                 }
               },
@@ -203,12 +233,12 @@ Page({
   async loadPointsConfig() {
     try {
       const app = getApp();
-      if (app.globalData && app.globalData.pointsConfig) {
+      if (app.globalData && app.globalData.pointsConfigReady) {
         const ac = app.globalData.pointsConfig.analyze_cost;
         const show = (typeof app.globalData.pointsConfig.show_points_section === 'number')
           ? (app.globalData.pointsConfig.show_points_section > 0)
           : true;
-        this.setData({ analyzeCost: (typeof ac === 'number') ? ac : 3, showPointsSection: show });
+        this.setData({ analyzeCost: (typeof ac === 'number') ? ac : this.data.analyzeCost, showPointsSection: show, configAvailable: true });
         return;
       }
       const cfgRes = await wx.cloud.callFunction({ name: 'points', data: { action: 'getConfig' } });
@@ -216,11 +246,12 @@ Page({
         const cfg = cfgRes.result.data;
         const ac2 = cfg.analyze_cost;
         const show2 = (typeof cfg.show_points_section === 'number') ? (cfg.show_points_section > 0) : true;
-        this.setData({ analyzeCost: (typeof ac2 === 'number') ? ac2 : 3, showPointsSection: show2 });
-        if (app.globalData) app.globalData.pointsConfig = cfg;
+        this.setData({ analyzeCost: (typeof ac2 === 'number') ? ac2 : this.data.analyzeCost, showPointsSection: show2, configAvailable: true });
+        if (app.globalData) { app.globalData.pointsConfig = cfg; app.globalData.pointsConfigReady = true }
       }
     } catch (e) {
-      console.warn('加载配置失败，使用默认 analyzeCost', e);
+      this.setData({ configAvailable: false });
+      wx.showToast({ title: '消耗点数失败，请稍后重试', icon: 'none' });
     }
   },
 
@@ -608,31 +639,18 @@ Page({
    * 分析图片
    */
   analyzeImage() {
-    // 分析进行中禁止重复触发
-    if (this.data.overlayVisible) {
-      return;
-    }
+    if (this.data.overlayVisible) return;
     if (!this.data.imageUrl) {
-      wx.showToast({
-        title: '请先上传图片',
-        icon: 'none'
-      });
+      wx.showToast({ title: '请先上传图片', icon: 'none' });
       return;
     }
-    // 检查积分是否足够（按配置）
-    const need = this.data.analyzeCost || 3;
+    if (!this.data.configAvailable) { wx.showToast({ title: '消耗点数失败，请稍后重试', icon: 'none' }); return; }
+    const need = this.data.analyzeCost;
     if (this.data.points < need) {
-      wx.showModal({
-        title: '妆妆蛋不足',
-        content: `立即分析需要消耗${need}点，当前点数不足。`,
-        showCancel: false
-      });
+      wx.showModal({ title: '妆妆蛋不足', content: `立即分析需要消耗${need}点，当前点数不足。`, showCancel: false });
       return;
     }
-
-    // 立即显示遮罩，开始分析流程（后扣减）
-    this.showOverlay();
-    this.startAnalysisFlow();
+    wx.navigateTo({ url: `/pages/analyzing/analyzing?imageUrl=${encodeURIComponent(this.data.imageUrl)}&need=${need}` });
   },
 
   // 扣减积分并启动分析流程（带一次重试）
@@ -751,7 +769,7 @@ Page({
    * 生命周期函数--监听页面显示
    */
   onShow() {
-    // 页面显示时刷新积分数据
+    this.fetchPointsQuickOnce();
     this.initializeData();
   },
 
@@ -790,7 +808,16 @@ Page({
     try {
       const app = getApp();
       const openid = app.globalData && app.globalData.openid;
-      if (!openid) return;
+      if (!openid) {
+        const c = (this._watchRetryCount || 0);
+        const delays = [600, 1200, 2400, 4800];
+        if (c >= delays.length) { this.startPointsQuickPolling(); return; }
+        const d = delays[c];
+        this._watchRetryCount = c + 1;
+        if (this._watchRetryTimer) { try { clearTimeout(this._watchRetryTimer) } catch (_) {} }
+        this._watchRetryTimer = setTimeout(() => this.startPointsWatcher(), d);
+        return;
+      }
       const db = wx.cloud.database();
       if (this._pointsWatcher && this._pointsWatcher.close) {
         try { this._pointsWatcher.close(); } catch (_) {}
@@ -803,15 +830,59 @@ Page({
           }
         },
         onError: err => {
-          console.error('makeup 积分监听错误', err);
-          // 监听失败时降级为轮询，避免登录失败导致数据不同步
-          this.startPointsPolling();
+          this.startPointsQuickPolling();
         }
       });
     } catch (e) {
-      console.error('makeup 开启积分监听失败', e);
-      // 初始化失败同样降级
-      this.startPointsPolling();
+      this.startPointsQuickPolling();
+    }
+  },
+  async fetchPointsQuickOnce() {
+    try {
+      const res = await wx.cloud.callFunction({ name: 'points', data: { action: 'getUserPoints' } });
+      if (res.result && res.result.success) {
+        const pts = res.result.data && res.result.data.points;
+        if (typeof pts === 'number') {
+          this.setData({ points: pts });
+          const app = getApp();
+          if (app.globalData) { app.globalData.userPoints = pts }
+          wx.setStorageSync('userPoints', pts);
+          return true;
+        }
+      }
+    } catch (_) {}
+    return false;
+  },
+  startPointsQuickPolling() {
+    if (this._quickPollingTimer) return;
+    this._quickPollingAttempts = 0;
+    this._quickPollingTimer = setInterval(async () => {
+      this._quickPollingAttempts = (this._quickPollingAttempts || 0) + 1;
+      try {
+        const res = await wx.cloud.callFunction({ name: 'points', data: { action: 'getUserPoints' } });
+        if (res.result && res.result.success) {
+          const pts = res.result.data && res.result.data.points;
+          if (typeof pts === 'number') {
+            this.setData({ points: pts });
+            const app = getApp();
+            if (app.globalData) { app.globalData.userPoints = pts }
+            wx.setStorageSync('userPoints', pts);
+            this.stopPointsQuickPolling();
+            this.startPointsPolling();
+            return;
+          }
+        }
+      } catch (_) {}
+      if (this._quickPollingAttempts >= 5) {
+        this.stopPointsQuickPolling();
+        this.startPointsPolling();
+      }
+    }, 1000);
+  },
+  stopPointsQuickPolling() {
+    if (this._quickPollingTimer) {
+      try { clearInterval(this._quickPollingTimer) } catch (_) {}
+      this._quickPollingTimer = null;
     }
   },
   stopPointsWatcher() {
@@ -820,6 +891,7 @@ Page({
       this._pointsWatcher = null;
     }
     this.stopPointsPolling();
+    this.stopPointsQuickPolling();
   },
 
   // —— 积分轮询降级 ——
@@ -859,7 +931,7 @@ Page({
           if (doc) {
             const ac = (typeof doc.analyze_cost === 'number') ? doc.analyze_cost : this.data.analyzeCost;
             const show = (typeof doc.show_points_section === 'number') ? (doc.show_points_section > 0) : this.data.showPointsSection;
-            this.setData({ analyzeCost: ac, showPointsSection: show });
+            this.setData({ analyzeCost: ac, showPointsSection: show, configAvailable: true });
           }
         },
         onError: err => {
@@ -900,7 +972,7 @@ Page({
           const ac = (typeof cfg.analyze_cost === 'number') ? cfg.analyze_cost : this.data.analyzeCost;
           const show = (typeof cfg.show_points_section === 'number') ? (cfg.show_points_section > 0) : this.data.showPointsSection;
           if (ac !== this.data.analyzeCost || show !== this.data.showPointsSection) {
-            this.setData({ analyzeCost: ac, showPointsSection: show });
+            this.setData({ analyzeCost: ac, showPointsSection: show, configAvailable: true });
           }
           if (app.globalData) app.globalData.pointsConfig = cfg;
         }

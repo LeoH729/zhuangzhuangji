@@ -32,7 +32,8 @@ Page({
     // 生成参考图遮罩
     overlayVisible: false,
     _genTimeoutTimer: null,
-    generateCost: 5
+    generateCost: 5,
+    configAvailable: true
   },
 
   /**
@@ -51,7 +52,6 @@ Page({
       const eventChannel = this.getOpenerEventChannel && this.getOpenerEventChannel();
       if (eventChannel && eventChannel.on) {
         eventChannel.on('analysisData', (data) => {
-          // 将数据映射到页面展示结构
           this.setData({
             analysisResult: {
               skin: data.skin || '',
@@ -59,19 +59,15 @@ Page({
               suggestions: data.suggestions || ''
             }
           });
-          console.log('接收到分析结果并已渲染到页面', this.data.analysisResult);
         });
       }
-    } catch (e) {
-      console.warn('事件通道不可用，使用预设数据', e);
-    }
+    } catch (e) {}
     
     // 通过事件通道接收分析结果（来自妆容页）
     try {
       const eventChannel = this.getOpenerEventChannel && this.getOpenerEventChannel();
       if (eventChannel && eventChannel.on) {
         eventChannel.on('analysisData', (data) => {
-          // 数据映射到页面展示结构
           this.setData({
             analysisResult: {
               skin: data.skin || '',
@@ -81,12 +77,25 @@ Page({
             imagePrompt: data.imagePrompt || '',
             photoUrl: data.photoUrl || ''
           });
-          this.logEvent('result-analysis-received', { hasPrompt: !!data.imagePrompt, hasPhotoUrl: !!data.photoUrl });
         });
       }
-    } catch (e) {
-      console.warn('事件通道不可用，使用预设数据', e);
-    }
+    } catch (e) {}
+
+    try {
+      const cached = wx.getStorageSync('analysisData');
+      if (cached) {
+        this.setData({
+          analysisResult: {
+            skin: cached.skin || '',
+            makeup: cached.makeup || '',
+            suggestions: cached.suggestions || ''
+          },
+          imagePrompt: cached.imagePrompt || '',
+          photoUrl: cached.photoUrl || ''
+        });
+        wx.removeStorageSync('analysisData');
+      }
+    } catch (_) {}
 
     // 获取全局积分数据
     this.loadUserPoints();
@@ -114,79 +123,16 @@ Page({
    * 超时：120秒
    */
   async generateMakeupReference() {
-    // 避免重复触发
     if (this.data.overlayVisible) return;
-
-    // 校验必要参数
+    if (!this.data.configAvailable) { wx.showToast({ title: '消耗点数失败，请稍后重试', icon: 'none' }); return; }
     const photo = this.data.photoUrl || this.data.originalImage;
     const prompt = this.data.imagePrompt || '';
-    if (!photo) {
-      wx.showToast({ title: '图片不可用', icon: 'none' });
-      return;
-    }
-
-    // 显示遮罩
-    this.showOverlay();
-
-    // 仅检查积分是否足够；实际扣减在成功后执行
-    const need = this.data.generateCost || 5;
-    if (this.data.points < need) {
-      this.hideOverlay();
-      wx.showModal({ title: '妆妆蛋不足', content: `生成参考图需要消耗${need}点，当前点数不足。`, showCancel: false });
-      return;
-    }
-
-    // 设置超时定时器
-    if (this.data._genTimeoutTimer) clearTimeout(this.data._genTimeoutTimer);
-    this.data._genTimeoutTimer = setTimeout(() => {
-      this.hideOverlay();
-      this.logEvent('generate-timeout', { timeoutMs: 120000 });
-      wx.showModal({ title: '超时', content: '生成超时，请稍后重试', showCancel: false });
-    }, 120000);
-
-    const start = Date.now();
-    this.logEvent('generate-start', { alias: 'generate_reference', hasPhotoUrl: !!this.data.photoUrl, hasPrompt: !!prompt });
-
-    try {
-      const res = await require('../../docs/coze_workflow_api_reference.js').callCozeWorkflow({
-        alias: 'generate_reference',
-        parameters: { photo, prompt }
-      });
-      const parsed = require('../../docs/coze_workflow_api_reference.js').parseWorkflowResponse(res);
-      const outputUrl = parsed.output || parsed.image || parsed.url || '';
-      const durationMs = Date.now() - start;
-      this.logEvent('generate-success', { durationMs, outputUrlLen: outputUrl.length });
-
-      // 清理定时器与遮罩
-      clearTimeout(this.data._genTimeoutTimer);
-      this.hideOverlay();
-
-      if (!outputUrl) {
-        wx.showModal({ title: '生成失败', content: '未获取到参考图地址', showCancel: false });
-        return;
-      }
-
-      // 成功后扣减资源点（后付费），不阻塞后续跳转
-      this.postConsumePointsAfterSuccess(need, 'generate');
-
-      // 跳转到参考页并传递参考图URL
-      wx.navigateTo({
-        url: `/pages/reference/reference?originalImage=${encodeURIComponent(this.data.originalImage)}`,
-        success: (resNav) => {
-          const ec = resNav.eventChannel;
-          ec && ec.emit('referenceData', { referenceImage: outputUrl });
-        }
-      });
-    } catch (err) {
-      clearTimeout(this.data._genTimeoutTimer);
-      this.hideOverlay();
-      this.logEvent('generate-fail', { errMsg: err && err.errMsg, error: err });
-      wx.showModal({
-        title: '生成失败',
-        content: (err && err.errMsg) ? err.errMsg : '网络或服务异常，请稍后重试',
-        showCancel: false
-      });
-    }
+    if (!photo) { wx.showToast({ title: '图片不可用', icon: 'none' }); return; }
+    const need = this.data.generateCost;
+    if (this.data.points < need) { wx.showModal({ title: '妆妆蛋不足', content: `生成参考图需要消耗${need}点，当前点数不足。`, showCancel: false }); return; }
+    try { wx.setStorageSync('generateParams', { photo, prompt, originalImage: this.data.originalImage, need }) } catch (_) {}
+    this.hideOverlay();
+    wx.navigateTo({ url: '/pages/makeup-generating/makeup-generating' });
   },
 
   // 成功后执行资源点扣减（带一次重试），不阻塞用户流程
@@ -257,12 +203,12 @@ Page({
   async loadPointsConfig() {
     try {
       const app = getApp();
-      if (app.globalData && app.globalData.pointsConfig) {
+      if (app.globalData && app.globalData.pointsConfigReady) {
         const gc0 = app.globalData.pointsConfig.generate_cost;
         const show0 = (typeof app.globalData.pointsConfig.show_points_section === 'number')
           ? (app.globalData.pointsConfig.show_points_section > 0)
           : true;
-        this.setData({ generateCost: (typeof gc0 === 'number') ? gc0 : 5, showPointsSection: show0 });
+        this.setData({ generateCost: (typeof gc0 === 'number') ? gc0 : this.data.generateCost, showPointsSection: show0, configAvailable: true });
         return;
       }
       const cfgRes = await wx.cloud.callFunction({ name: 'points', data: { action: 'getConfig' } });
@@ -270,11 +216,12 @@ Page({
         const cfg = cfgRes.result.data;
         const gc1 = cfg.generate_cost;
         const show1 = (typeof cfg.show_points_section === 'number') ? (cfg.show_points_section > 0) : true;
-        this.setData({ generateCost: (typeof gc1 === 'number') ? gc1 : 5, showPointsSection: show1 });
-        if (app.globalData) app.globalData.pointsConfig = cfg;
+        this.setData({ generateCost: (typeof gc1 === 'number') ? gc1 : this.data.generateCost, showPointsSection: show1, configAvailable: true });
+        if (app.globalData) { app.globalData.pointsConfig = cfg; app.globalData.pointsConfigReady = true }
       }
     } catch (e) {
-      console.warn('加载配置失败，使用默认', e);
+      this.setData({ configAvailable: false });
+      wx.showToast({ title: '消耗点数失败，请稍后重试', icon: 'none' });
     }
   },
 
@@ -283,7 +230,16 @@ Page({
     try {
       const app = getApp();
       const openid = app.globalData && app.globalData.openid;
-      if (!openid) return;
+      if (!openid) {
+        const c = (this._watchRetryCount || 0);
+        const delays = [600, 1200, 2400, 4800];
+        if (c >= delays.length) { this.startPointsQuickPolling(); return; }
+        const d = delays[c];
+        this._watchRetryCount = c + 1;
+        if (this._watchRetryTimer) { try { clearTimeout(this._watchRetryTimer) } catch (_) {} }
+        this._watchRetryTimer = setTimeout(() => this.startPointsWatcher(), d);
+        return;
+      }
       const db = wx.cloud.database();
       if (this._pointsWatcher && this._pointsWatcher.close) {
         try { this._pointsWatcher.close(); } catch (_) {}
@@ -296,14 +252,11 @@ Page({
           }
         },
         onError: err => {
-          console.error('result 积分监听错误', err);
-          // 监听失败时降级为轮询
-          this.startPointsPolling();
+          this.startPointsQuickPolling();
         }
       });
     } catch (e) {
-      console.error('result 开启积分监听失败', e);
-      this.startPointsPolling();
+      this.startPointsQuickPolling();
     }
   },
   stopPointsWatcher() {
@@ -312,6 +265,7 @@ Page({
       this._pointsWatcher = null;
     }
     this.stopPointsPolling();
+    this.stopPointsQuickPolling();
   },
 
   /**
@@ -351,6 +305,38 @@ Page({
       } catch (_) { /* 静默失败，下一轮继续 */ }
     }, 10000);
   },
+  startPointsQuickPolling() {
+    if (this._quickPollingTimer) return;
+    this._quickPollingAttempts = 0;
+    this._quickPollingTimer = setInterval(async () => {
+      this._quickPollingAttempts = (this._quickPollingAttempts || 0) + 1;
+      try {
+        const res = await wx.cloud.callFunction({ name: 'points', data: { action: 'getUserPoints' } });
+        if (res.result && res.result.success) {
+          const pts = res.result.data && res.result.data.points;
+          if (typeof pts === 'number') {
+            this.setData({ points: pts });
+            const app = getApp();
+            if (app.globalData) { app.globalData.userPoints = pts }
+            wx.setStorageSync('userPoints', pts);
+            this.stopPointsQuickPolling();
+            this.startPointsPolling();
+            return;
+          }
+        }
+      } catch (_) {}
+      if (this._quickPollingAttempts >= 5) {
+        this.stopPointsQuickPolling();
+        this.startPointsPolling();
+      }
+    }, 1000);
+  },
+  stopPointsQuickPolling() {
+    if (this._quickPollingTimer) {
+      try { clearInterval(this._quickPollingTimer) } catch (_) {}
+      this._quickPollingTimer = null;
+    }
+  },
   stopPointsPolling() {
     if (this._pointsPollingTimer) {
       try { clearInterval(this._pointsPollingTimer); } catch (_) {}
@@ -374,7 +360,7 @@ Page({
           if (doc) {
             const gc = (typeof doc.generate_cost === 'number') ? doc.generate_cost : this.data.generateCost;
             const show = (typeof doc.show_points_section === 'number') ? (doc.show_points_section > 0) : this.data.showPointsSection;
-            this.setData({ generateCost: gc, showPointsSection: show });
+            this.setData({ generateCost: gc, showPointsSection: show, configAvailable: true });
           }
         },
         onError: err => {
@@ -415,7 +401,7 @@ Page({
           const gc = (typeof cfg.generate_cost === 'number') ? cfg.generate_cost : this.data.generateCost;
           const show = (typeof cfg.show_points_section === 'number') ? (cfg.show_points_section > 0) : this.data.showPointsSection;
           if (gc !== this.data.generateCost || show !== this.data.showPointsSection) {
-            this.setData({ generateCost: gc, showPointsSection: show });
+            this.setData({ generateCost: gc, showPointsSection: show, configAvailable: true });
           }
           if (app.globalData) app.globalData.pointsConfig = cfg;
         }
@@ -442,10 +428,26 @@ Page({
    * 生命周期函数--监听页面显示
    */
   onShow() {
-    // 每次页面显示时同步积分数据
+    this.fetchPointsQuickOnce();
     this.loadUserPoints();
     // 同步最新配置
     this.loadPointsConfig();
+  },
+  async fetchPointsQuickOnce() {
+    try {
+      const res = await wx.cloud.callFunction({ name: 'points', data: { action: 'getUserPoints' } });
+      if (res.result && res.result.success) {
+        const pts = res.result.data && res.result.data.points;
+        if (typeof pts === 'number') {
+          this.setData({ points: pts });
+          const app = getApp();
+          if (app.globalData) { app.globalData.userPoints = pts }
+          wx.setStorageSync('userPoints', pts);
+          return true;
+        }
+      }
+    } catch (_) {}
+    return false;
   },
 
   /**

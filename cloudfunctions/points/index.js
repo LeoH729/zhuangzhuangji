@@ -24,9 +24,6 @@ exports.main = async (event, context) => {
       case 'getUserPoints':
         return await getUserPoints(wxContext.OPENID)
       case 'consume':
-        if (!amount || amount <= 0) {
-          return { success: false, code: 'BAD_AMOUNT', message: '扣减点数不合法' }
-        }
         return await consumePoints(wxContext.OPENID, amount, reason)
       default:
         return { success: false, code: 'UNKNOWN_ACTION', message: '未知操作' }
@@ -125,6 +122,12 @@ async function consumePoints(openid, amount, reason = '') {
     }
 
     const current = (doc && doc.data && doc.data.points) || 0
+    if (typeof amount !== 'number') {
+      return { success: false, code: 'BAD_AMOUNT', message: '扣减点数不合法', data: { points: current } }
+    }
+    if (amount <= 0) {
+      return { success: true, data: { points: current } }
+    }
     if (current < amount) {
       return { success: false, code: 'INSUFFICIENT', message: '积分不足', data: { points: current } }
     }

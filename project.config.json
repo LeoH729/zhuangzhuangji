@@ -40,25 +40,57 @@
         "compileWorklet": false,
         "localPlugins": false,
         "condition": false,
-        "swc": true,
-        "disableSWC": false
+        "swc": false,
+        "disableSWC": true
     },
     "compileType": "miniprogram",
     "simulatorPluginLibVersion": {},
     "packOptions": {
         "ignore": [
-
-            { "type": "glob", "value": "wx-subscribe-sdk/**" },
-            { "type": "glob", "value": "pages/index/**" },
-            { "type": "glob", "value": "docs/.accelerate/**" },
-            { "type": "file", "value": "docs/lottie_animation_reference.js" },
-            { "type": "file", "value": "README.md" },
-            { "type": "file", "value": "README_CLOUD_SETUP.md" },
-            { "type": "file", "value": "project.private.config.json" },
-            { "type": "file", "value": "package.json" },
-            { "type": "file", "value": "package-lock.json" },
-            { "type": "glob", "value": "cloudbase/**" },
-            { "type": "glob", "value": "cloudfunctions/**" }
+            {
+                "value": "wx-subscribe-sdk/**",
+                "type": "glob"
+            },
+            {
+                "value": "pages/index/**",
+                "type": "glob"
+            },
+            {
+                "value": "docs/.accelerate/**",
+                "type": "glob"
+            },
+            {
+                "value": "docs/lottie_animation_reference.js",
+                "type": "file"
+            },
+            {
+                "value": "README.md",
+                "type": "file"
+            },
+            {
+                "value": "README_CLOUD_SETUP.md",
+                "type": "file"
+            },
+            {
+                "value": "project.private.config.json",
+                "type": "file"
+            },
+            {
+                "value": "package.json",
+                "type": "file"
+            },
+            {
+                "value": "package-lock.json",
+                "type": "file"
+            },
+            {
+                "value": "cloudbase/**",
+                "type": "glob"
+            },
+            {
+                "value": "cloudfunctions/**",
+                "type": "glob"
+            }
         ],
         "include": []
     },

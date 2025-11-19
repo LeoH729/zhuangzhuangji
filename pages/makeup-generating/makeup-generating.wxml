@@ -1,0 +1,15 @@
+<view class="container {{playing ? 'play' : 'paused'}}">
+  <image class="timer-image" src="/images/img_makeuping.png" mode="widthFix"></image>
+  <view class="tip-block">
+    <text class="tip-text">小妆努力生成妆容图</text>
+    <text class="tip-text">请稍候...</text>
+  </view>
+
+  <view class="carousel">
+    <text class="line l1">{{allLines[0]}}</text>
+    <text class="line l2">{{allLines[1]}}</text>
+    <text class="line l3">{{allLines[2]}}</text>
+    <text class="line l4">{{allLines[3]}}</text>
+    <text class="line l5">{{allLines[4]}}</text>
+  </view>
+</view>
