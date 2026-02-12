@@ -1,195 +1,133 @@
 /* pages/result/result.wxss */
+button {
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  line-height: inherit;
+  border-radius: 0;
+}
+button::after { border: none; }
+
 .container {
-  padding: 32rpx;
-  padding-bottom: 200rpx; /* 为固定按钮预留空间 */
-  background-color: #FFF6F7;
-  min-height: 100vh;
-}
-
-/* 原图展示区 */
-.image-section {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 32rpx;
-}
-
-.original-image {
-  width: 400rpx;
-  height: 400rpx;
-  border-radius: 44rpx;
-  border: 1rpx solid #E1BFC3;
-  background-color: white;
-}
-
-/* 妆妆蛋资源点区域 */
-.points-section {
-  position: fixed;
-  top: 330rpx;
-  right: 16rpx;
-  z-index: 999;
-}
-
-.points-container {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.egg-icon {
-  width: 36rpx;
-  height: 36rpx;
-  margin-right: 8rpx;
-}
-
-.points-badge {
-  background-color: #f4c00c;
-  border-radius: 32rpx;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  padding: 8rpx 16rpx;
-  box-shadow: 0 4rpx 12rpx rgba(244, 192, 12, 0.3);
-}
-
-.points-number {
-  font-size: 32rpx;
-  color: #92404a;
-  font-weight: bold;
-}
-
-/* 分析区域通用样式 */
-.analysis-section {
-  margin-bottom: 32rpx;
-  border-radius: 32rpx;
-  border: 1rpx solid #F8ACB5;
-  background-color: white;
-  padding: 32rpx;
-}
-
-/* 优化建议区特殊样式 */
-.suggestions-section {
-  margin-bottom: 100rpx;
-}
-
-/* 区域行容器 - 左右分布 */
-.section-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 24rpx;
-}
-
-/* 区域标题 */
-.section-title {
-  font-size: 28rpx;
-  font-weight: bold;
-  color: #333333;
-  flex-shrink: 0;
-  width: auto;
-}
-
-/* 区域内容 */
-.section-content {
-  font-size: 28rpx;
-  color: #666666;
-  line-height: 1.6;
-  text-align: justify;
-  flex: 1;
-}
-
-/* 生成妆容参考按钮 */
-.generate-btn {
-  position: fixed;
-  bottom: 80rpx;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 640rpx;
-  height: 96rpx;
-  border-radius: 48rpx;
-  background-color: #F8ACB5;
-  color: #333333;
-  font-size: 32rpx;
-  font-weight: bold;
-  border: none;
-  box-shadow: 0 4rpx 8rpx rgba(0, 0, 0, 0.1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 999;
-}
-
-/* 重置按钮默认样式 */
-.generate-btn::after {
-  border: none;
-}
-
-/* 按钮禁用样式 */
-.generate-btn.disabled {
-  background-color: #FFE4E7 !important;
-  color: #ffffff !important;
-}
-
-/* 全屏遮罩样式（与妆容页保持一致） */
-.analysis-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(0, 0, 0, 0.6);
-  z-index: 9999;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.3s ease, visibility 0.3s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.analysis-overlay.show {
-  opacity: 1;
-  visibility: visible;
-}
-
-.overlay-content {
+  background-color: #1a1a1a; /* 沉浸深色背景 */
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+}
+
+/* 核心对比区 */
+.compare-container {
+  flex: 1;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+  background: #000;
+}
+
+/* 图片图层 - 绝对定位重叠 */
+.image-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  overflow: hidden; /* 关键：裁剪内容 */
+}
+
+.original-layer {
+  width: 100%; /* 底层原图始终显示全宽，但被上层遮挡 */
+  z-index: 1;
+}
+
+.result-layer {
+  z-index: 2;
+  border-right: 2rpx solid rgba(255,255,255,0.8); /* 分割线高亮 */
+  /* width 由 inline style 动态控制 */
+}
+
+/* 图片本身 */
+.comp-img {
+  width: 100vw; /* 关键：图片必须设为视口宽度，而不是 100% (否则裁剪时会变形) */
+  height: 100%;
+}
+
+/* 标签 */
+.layer-tag {
+  position: absolute;
+  top: 40rpx;
+  padding: 8rpx 24rpx;
+  background: rgba(0,0,0,0.5);
+  color: #fff;
+  font-size: 24rpx;
+  border-radius: 30rpx;
+  backdrop-filter: blur(4px);
+  z-index: 10;
+  white-space: nowrap; /* 防止挤压换行 */
+  transition: opacity 0.2s ease; /* 增加淡入淡出效果 */
+}
+.layer-tag.left { left: 40rpx; }
+.layer-tag.right { left: 40rpx; background: rgba(255,112,132,0.6); }
+
+/* 滑块手柄 */
+.slider-handle-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  z-index: 20;
+  /* left 由 inline style 控制 */
+}
+
+.slider-arrow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 64rpx;
+  height: 64rpx;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.3);
+  display: flex;
+  justify-content: center;
   align-items: center;
 }
-
-.spinner {
-  width: 80rpx;
-  height: 80rpx;
-  border: 8rpx solid rgba(255, 255, 255, 0.3);
-  border-top-color: #ffffff;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
+.slider-arrow image {
+  width: 32rpx;
+  height: 32rpx;
+}
+/* 如果没有 icon，用 CSS 伪元素画个箭头 */
+.slider-arrow::before, .slider-arrow::after {
+  content: '';
+  display: block;
+  width: 0;
+  height: 0;
+  border-top: 8rpx solid transparent;
+  border-bottom: 8rpx solid transparent;
+  position: absolute;
+}
+.slider-arrow::before {
+  border-right: 10rpx solid #333;
+  left: 12rpx;
+}
+.slider-arrow::after {
+  border-left: 10rpx solid #333;
+  right: 12rpx;
 }
 
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+/* 底部操作栏 */
+.footer-actions {
+  height: 180rpx;
+  background: #1a1a1a;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 40rpx;
+  padding-bottom: constant(safe-area-inset-bottom);
+  padding-bottom: env(safe-area-inset-bottom);
+  box-shadow: 0 -4rpx 20rpx rgba(0,0,0,0.3);
+  z-index: 30;
 }
 
-.overlay-text {
-  margin-top: 24rpx;
-  color: #ffffff;
-  font-size: 28rpx;
-}
-
-/* 复用妆容页的积分不足提示样式 */
-.insufficient-hint {
-  margin-top: 16rpx;
-  text-align: center;
-  color: #e97885;
-  font-size: 26rpx;
-}
-
-/* 固定定位到按钮下方 */
-.result-hint {
-  position: fixed;
-  bottom: 42rpx;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 640rpx;
-  z-index: 999;
-}
+/* .action-btn 等已替换为全局按钮样式 */

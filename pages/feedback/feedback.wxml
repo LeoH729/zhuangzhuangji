@@ -1,0 +1,35 @@
+<!--pages/feedback/feedback.wxml-->
+<view class="container">
+  <view class="form-group">
+    <view class="label">反馈类型</view>
+    <picker range="{{contactTypes}}" bindchange="onTypeChange" value="{{contactIndex}}">
+      <view class="picker-row">
+        <text>{{contactTypes[contactIndex]}}</text>
+        <image class="arrow" src="/images/arrow_right.svg"></image>
+      </view>
+    </picker>
+  </view>
+
+  <view class="form-group">
+    <view class="label">反馈内容</view>
+    <textarea 
+      class="content-input" 
+      placeholder="请详细描述您遇到的问题或建议..." 
+      bindinput="onInput" 
+      data-field="content"
+      maxlength="500"
+    ></textarea>
+  </view>
+
+  <view class="form-group">
+    <view class="label">联系方式 (选填)</view>
+    <input 
+      class="contact-input" 
+      placeholder="请输入手机号或邮箱" 
+      bindinput="onInput" 
+      data-field="email"
+    />
+  </view>
+
+  <button class="submit-btn" bindtap="submitFeedback">提交反馈</button>
+</view>

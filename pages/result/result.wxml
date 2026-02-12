@@ -1,62 +1,36 @@
 <!--pages/result/result.wxml-->
 <view class="container">
-  <!-- 原图展示区 -->
-  <view class="image-section">
-    <image class="original-image" src="{{originalImage}}" mode="aspectFill"></image>
-  </view>
-
-  <!-- 妆妆蛋资源点区域（可运营开关） -->
-  <view class="points-section" wx:if="{{showPointsSection}}">
-    <view class="points-container">
-      <view class="points-badge">
-        <image class="egg-icon" src="/images/icon_zzj_egg.svg" mode="aspectFit"></image>
-        <text class="points-number">{{points}}</text>
+  <!-- 核心对比区 (全屏自适应，留出底部按钮高度) -->
+  <view class="compare-container" bindtouchmove="onSliderMove" bindtouchstart="onSliderMove">
+    
+    <!-- 1. 底层：原图 -->
+    <view class="image-layer original-layer">
+      <image src="{{originalImage}}" mode="aspectFit" class="comp-img"></image>
+      <view class="layer-tag left">原图</view>
+    </view>
+    
+    <!-- 2. 上层：效果图 (通过宽度控制显示区域) -->
+    <view class="image-layer result-layer" style="width: {{sliderValue}}%;">
+      <image src="{{resultImage}}" mode="aspectFit" class="comp-img"></image>
+      <view class="layer-tag right" style="opacity: {{sliderValue < 15 ? 0 : 1}}">上妆后</view>
+    </view>
+    
+    <!-- 3. 这个是分割线和拖拽手柄 -->
+    <view class="slider-handle-line" style="left: {{sliderValue}}%;">
+      <view class="slider-arrow">
+        <image src="/images/icon_slider_arrow.svg" mode="aspectFit"></image> <!-- 需准备图标，或用纯CSS箭头 -->
       </view>
     </view>
+    
   </view>
 
-  
-
-  <!-- 皮肤模块 -->
-  <view class="analysis-section">
-    <view class="section-row">
-      <view class="section-title">皮肤</view>
-      <view class="section-content">{{analysisResult.skin}}</view>
+  <!-- 底部操作区 -->
+  <view class="footer-actions">
+    <view style="width: 240rpx;">
+      <button class="btn-secondary-dark" hover-class="btn-hover" bindtap="goHome">返回首页</button>
     </view>
-  </view>
-
-  <!-- 妆容模块 -->
-  <view class="analysis-section">
-    <view class="section-row">
-      <view class="section-title">妆容</view>
-      <view class="section-content">{{analysisResult.makeup}}</view>
-    </view>
-  </view>
-
-  <!-- 建议模块 -->
-  <view class="analysis-section suggestions-section">
-    <view class="section-row">
-      <view class="section-title">建议</view>
-      <view class="section-content">{{analysisResult.suggestions}}</view>
-    </view>
-  </view>
-
-  <!-- 生成妆容参考按钮 -->
-  <button class="generate-btn {{(!configAvailable || points < generateCost) ? 'disabled' : ''}}" bindtap="generateMakeupReference" disabled="{{overlayVisible || !configAvailable || points < generateCost}}">
-    生成妆容参考<text wx:if="{{configAvailable && generateCost > 0}}">（消耗{{generateCost}}点）</text>
-  </button>
-  <!-- 妆妆蛋不足提示（复用样式） -->
-  <view wx:if="{{configAvailable && points < generateCost}}" class="insufficient-hint result-hint">当前妆妆蛋不足，请先进行充值哦！</view>
-
-  <!-- 全屏加载遮罩层（生成参考图） -->
-  <view 
-    class="analysis-overlay {{overlayVisible ? 'show' : ''}}" 
-    catchtouchmove="preventTouchMove" 
-    catchtap="blockTap"
-  >
-    <view class="overlay-content">
-      <view class="spinner"></view>
-      <text class="overlay-text">努力生成中，请稍后！</text>
+    <view style="width: 380rpx;">
+      <button class="btn-primary" hover-class="btn-hover" bindtap="saveImage">保存美照</button>
     </view>
   </view>
 </view>

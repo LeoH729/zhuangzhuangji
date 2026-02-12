@@ -1,0 +1,30 @@
+<!--pages/generation-history/generation-history.wxml-->
+<view class="container">
+  <view class="list">
+    <!-- 骨架屏/加载中 -->
+    <view wx:if="{{loading}}" class="loading-view">
+      <view class="spinner"></view>
+      <text>加载中...</text>
+    </view>
+    
+    <!-- 空状态 -->
+    <view wx:if="{{!loading && historyList.length === 0}}" class="empty-view">
+      <image class="empty-icon" src="/images/empty.png" mode="aspectFit"></image>
+      <text>暂无试妆记录</text>
+    </view>
+    
+    <!-- 列表项 (预留) -->
+    <block wx:for="{{historyList}}" wx:key="id">
+      <view class="history-item">
+        <image class="result-img" src="{{item.resultUrl}}" mode="aspectFill"></image>
+        <view class="info-col">
+          <text class="style-name">{{item.styleName}}</text>
+          <text class="date-time">{{item.date}}</text>
+        </view>
+        <view class="action-col">
+          <button class="view-btn" size="mini" bindtap="onViewImage" data-url="{{item.resultUrl}}">查看</button>
+        </view>
+      </view>
+    </block>
+  </view>
+</view>

@@ -1,82 +1,84 @@
 <!--pages/makeup/makeup.wxml-->
-<view class="container">
-  <!-- 顶部banner区域（仅当云端提供时展示） -->
-  <view class="banner-section" wx:if="{{bannerImageUrl}}">
-    <image class="banner-image" src="{{bannerImageUrl}}" mode="aspectFill" lazy-load="true"></image>
-  </view>
+<view class="studio-container {{!imageUrl ? 'empty' : ''}}">
 
-  <!-- 图片上传区域 -->
-  <view class="upload-section">
-    <view class="upload-wrapper">
-      <view class="upload-container" bindtap="chooseImage">
-        <!-- 未上传状态 -->
-        <view wx:if="{{!imageUrl}}" class="upload-placeholder">
-          <image class="add-icon" src="/images/icon_zr_add.svg" mode="aspectFit"></image>
-        </view>
-        
-        <!-- 已上传状态 -->
-        <view wx:else class="uploaded-container">
-          <image class="uploaded-image" src="{{imageUrl}}" mode="aspectFill"></image>
+  <!-- 1. 顶部预览区 (65%) -->
+  <view class="preview-area {{!imageUrl ? 'empty' : ''}}">
+    <!-- 提示按钮 (仅在有图时显示在右上角) -->
+    <view class="tips-btn" bindtap="onShowTips" wx:if="{{imageUrl && tipsImageUrl}}">
+      <image src="/images/icon_tips_small.svg" mode="aspectFit"></image>
+    </view>
+
+    <!-- 图片展示/上传占位 -->
+    <view class="image-container {{!imageUrl ? 'flex-column' : ''}}" bindtap="chooseImage">
+      <block wx:if="{{imageUrl}}">
+        <view class="user-image-wrapper">
+          <image class="user-image" src="{{imageUrl}}" mode="aspectFit"></image>
+          <view class="reupload-hint">点击图片重新上传</view>
           <view class="delete-btn" catchtap="deleteImage">
-            <image class="delete-icon" src="/images/icon_zr_delete.svg" mode="aspectFit"></image>
+              <image src="/images/icon_close_white.svg" mode="aspectFit"></image>
           </view>
         </view>
-      </view>
-      <!-- 文字移到白色区域下方 -->
-      <view wx:if="{{!imageUrl}}" class="upload-text-wrapper">
-        <text class="upload-text">点击上传照片分析妆容</text>
-      </view>
+      </block>
+      <block wx:else>
+        <!-- 未上传时：显示提示图 + 上传按钮 -->
+        <image class="inline-tips-img" src="{{tipsImageUrl}}" mode="widthFix" wx:if="{{tipsImageUrl}}"></image>
+        <view class="placeholder-box">
+          <view class="add-square">
+            <image class="add-icon" src="/images/icon_zr_add.svg" mode="aspectFit"></image>
+          </view>
+          <text class="add-text">点击上传一张正脸照</text>
+        </view>
+      </block>
     </view>
   </view>
 
-  <!-- 妆妆蛋资源点区域（可运营开关） -->
-  <view class="points-section" wx:if="{{showPointsSection}}">
-    <view class="points-container">
-      <view class="points-badge">
+  <!-- 2. 底部操作区 (35%) -->
+  <view class="control-panel">
+    <!-- 风格选择 -->
+    <view class="style-section">
+      <view class="section-title">选择妆容</view>
+      <scroll-view class="style-list" scroll-x enable-flex>
+        <block wx:for="{{styles}}" wx:key="id">
+          <view 
+            class="style-item {{selectedStyleId === item.id ? 'active' : ''}}" 
+            bindtap="onSelectStyle" 
+            data-id="{{item.id}}"
+          >
+            <image class="style-icon" src="{{item.icon}}" mode="aspectFill"></image>
+            <text class="style-name">{{item.name}}</text>
+          </view>
+        </block>
+      </scroll-view>
+    </view>
+
+    <!-- 底部按钮区 -->
+    <view class="action-footer">
+      <!-- 积分显示 -->
+      <view class="points-badge" wx:if="{{showPointsSection}}" bindtap="goPointsPage">
         <image class="egg-icon" src="/images/icon_zzj_egg.svg" mode="aspectFit"></image>
-        <text class="points-number">{{points}}</text>
+        <text class="points-val">{{points}}</text>
       </view>
+
+      <button
+        class="btn-primary"
+        hover-class="btn-hover"
+        bindtap="analyzeImage"
+        disabled="{{(!imageUrl || isUploading)}}"
+      >
+        立即上妆
+        <text class="cost" wx:if="{{tryonCost > 0}}">(-{{tryonCost}}蛋)</text>
+      </button>
     </view>
   </view>
 
-  <!-- 小贴士区域（仅当云端提供时展示） -->
-  <view class="tips-section" wx:if="{{tipsImageUrl}}">
-    <image class="tips-image" src="{{tipsImageUrl}}" mode="aspectFit" lazy-load="true"></image>
-  </view>
-
-  <!-- 立即分析按钮 -->
-  <view class="analyze-section">
-    <button 
-      class="analyze-btn {{(imageUrl && configAvailable && points >= analyzeCost) ? 'active' : 'disabled'}}" 
-      bindtap="analyzeImage"
-      disabled="{{!imageUrl || !configAvailable || points < analyzeCost}}"
-    >
-      立即分析<text wx:if="{{configAvailable && analyzeCost > 0}}">（消耗{{analyzeCost}}点）</text>
-    </button>
-    <!-- 积分不足提示 -->
-    <view wx:if="{{configAvailable && points < analyzeCost}}" class="insufficient-hint">
-      当前妆妆蛋不足，请先进行充值哦！
-    </view>
-
-    <!-- 管理员入口按钮（仅管理员显示） -->
-    <button
-      wx:if="{{isAdmin}}"
-      class="admin-btn"
-      bindtap="goAdminPage"
-    >
-      管理员入口
-    </button>
-  </view>
-
-  <!-- 全屏加载遮罩层 -->
-  <view 
-    class="analysis-overlay {{overlayVisible ? 'show' : ''}}" 
-    catchtouchmove="preventTouchMove" 
-    catchtap="blockTap"
-  >
-    <view class="overlay-content">
-      <view class="spinner"></view>
-      <text class="overlay-text">正在分析中，请稍候...</text>
+  <!-- 提示弹窗 (Overlay) -->
+  <view class="tips-overlay" wx:if="{{isTipsShow}}" bindtap="onHideTips">
+    <view class="tips-card" catchtap="return">
+      <view class="tips-header">
+        <text>拍摄小贴士</text>
+        <image class="close-icon" src="/images/icon_close_gray.svg" bindtap="onHideTips"></image>
+      </view>
+      <image class="tips-content" src="{{tipsImageUrl}}" mode="widthFix"></image>
     </view>
   </view>
 </view>

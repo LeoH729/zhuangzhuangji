@@ -1,0 +1,21 @@
+{
+  "name": "paymentNotify",
+  "version": "1.0.0",
+  "description": "微信支付SDK - 支付回调通知处理云函数",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "wechat",
+    "payment",
+    "miniprogram",
+    "sdk",
+    "callback"
+  ],
+  "author": "WxPaymentSDK",
+  "license": "MIT"
+} 

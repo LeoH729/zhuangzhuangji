@@ -2,18 +2,70 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  background-color: #FFF6F7;
+  background-color: #FFF0F5; /* 改为柔和的粉色背景 */
   min-height: 100vh;
+  padding-top: 100rpx;
 }
-.timer-image {
-  margin-top: 236rpx;
-  width: 260rpx;
+
+.scan-container {
+  position: relative;
+  width: 480rpx;
+  height: 640rpx;
+  border-radius: 40rpx;
+  overflow: hidden;
+  border: 4rpx solid rgba(255, 154, 158, 0.5); /* 边框颜色加深 */
+  box-shadow: 0 0 40rpx rgba(255, 154, 158, 0.3);
+  margin-bottom: 60rpx;
+  background-color: #fff; /* 增加白色底防止镂空 */
 }
+
+.user-preview {
+  width: 100%;
+  height: 100%;
+  filter: none; /* 移除灰度滤镜，保持原色，更符合生成中而非分析中的语境 */
+}
+
+.scan-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 4rpx;
+  background: linear-gradient(90deg, transparent, #FF9A9E, transparent);
+  box-shadow: 0 0 20rpx #FF9A9E, 0 0 40rpx #FF9A9E;
+  z-index: 5;
+  animation: scanMove 3s linear infinite;
+}
+
+.scan-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(to bottom, transparent, rgba(255, 154, 158, 0.1), transparent);
+  z-index: 4;
+  animation: scanMaskMove 3s linear infinite;
+}
+
+@keyframes scanMove {
+  0% { top: 0; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+@keyframes scanMaskMove {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
 .tip-text {
-  margin-top: 24rpx;
   margin-bottom: 80rpx;
-  color: #ED8C96;
-  font-size: 30rpx;
+  color: #FF7084; /* 更深一点的粉红色 */
+  font-size: 34rpx;
+  font-weight: bold;
+  letter-spacing: 2rpx;
 }
 .carousel {
   position: relative;
@@ -26,8 +78,8 @@
   left: 0;
   right: 0;
   text-align: center;
-  color: #ED8C96;
-  font-size: 24rpx;
+  color: #E97885; /* 配合背景色的文字颜色 */
+  font-size: 26rpx;
   opacity: 0.7;
   will-change: transform, opacity;
   transform: translate3d(0, 0, 0) scale(1);

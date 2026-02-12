@@ -1,5 +1,5 @@
-// pages/makeup/makeup.js
-const coze = require('../../docs/coze_workflow_api_reference.js');
+const StyleManager = require('../../utils/styleManager');
+
 Page({
 
   /**
@@ -8,26 +8,30 @@ Page({
   data: {
     imageUrl: '', // 上传的图片路径
     points: 0,   // 妆妆蛋资源点数量
-    analyzeCost: 0, // 每次分析消耗点数（可配置）
+    tryonCost: 0, // 每次虚拟试妆消耗点数（读取 tryon_cost）
     configAvailable: true,
     isUploading: false, // 图片上传状态
-    uploadedFileId: '', // 云存储fileID
-    uploadedTempFileUrl: '', // 云存储临时URL
-    overlayVisible: false, // 全屏遮罩显示状态
     isAdmin: false, // 管理员身份标识
     // 新增：妆妆蛋资源点区域显示控制（默认显示）
     showPointsSection: true,
     // 云端运营图片（移除本地兜底，默认空，由云端下发）
     bannerImageUrl: '',
-    tipsImageUrl: '',
-    bannerSourceRaw: '',
-    tipsSourceRaw: ''
+    tipsImageUrl: '/images/img_tips_default.png',
+    // 虚拟试妆风格列表 (默认空，等待配置加载)
+    styles: [],
+    selectedStyleId: '',
+    isTipsShow: false,
+    debugInfo: 'Init...'
   },
 
   /**
    * 生命周期函数--监听页面加载
    */
   onLoad(options) {
+    console.log('[DEBUG-Lifecycle] onLoad');
+    // 强制清除旧缓存，确保读取最新配置
+    wx.removeStorageSync('pointsConfig');
+
     // 初始化页面数据
     this.initializeData();
     this._assetUrlCache = {};
@@ -37,6 +41,7 @@ Page({
    * 初始化页面数据
    */
   initializeData() {
+    console.log('[DEBUG-Lifecycle] initializeData - start');
     const app = getApp();
     // —— 同步积分：优先全局，其次本地存储（保留 0 值）——
     const gp = app.globalData && app.globalData.userPoints;
@@ -50,23 +55,16 @@ Page({
     }
 
     // 读取配置（如存在），否则主动请求
-    if (app.globalData && app.globalData.pointsConfig) {
-      const cfgAc = app.globalData.pointsConfig.analyze_cost;
-      const show = (typeof app.globalData.pointsConfig.show_points_section === 'number')
-        ? (app.globalData.pointsConfig.show_points_section > 0)
-        : true;
-      this.setData({ analyzeCost: (typeof cfgAc === 'number') ? cfgAc : 3, showPointsSection: show });
-    } else {
-      this.loadPointsConfig();
-    }
+    // DEBUG: 暂时绕过全局缓存，强制拉取最新配置
+    // if (app.globalData && app.globalData.pointsConfig) {
+    //   this._applyConfig(app.globalData.pointsConfig);
+    // } else {
+    this.loadPointsConfig();
+    // }
 
     this.startPointsWatcher();
     // 开启配置实时监听
     this.startConfigWatcher();
-
-    // 加载与监听云端运营图片
-    this.loadAssetsConfig();
-    this.startAssetsWatcher();
 
     // 同步管理员身份
     const isAdminStored = wx.getStorageSync('isAdmin')
@@ -79,6 +77,41 @@ Page({
         this.setData({ isAdmin: isAdminLater })
       }
     }, 800)
+    console.log('[DEBUG-Lifecycle] initializeData - end');
+  },
+
+  // 统一应用配置（处理缓存图片路径）
+  // 统一应用配置（处理缓存图片路径）
+  _applyConfig(cfg) {
+    if (!cfg) return;
+
+    const updateData = {};
+
+    // 1. 处理通用配置
+    if (typeof cfg.tryon_cost === 'number') updateData.tryonCost = cfg.tryon_cost;
+    if (typeof cfg.show_points_section === 'number') updateData.showPointsSection = (cfg.show_points_section > 0);
+
+    // 2. 处理风格列表（通过 StyleManager 获取缓存路径）
+    if (cfg.styles && Array.isArray(cfg.styles)) {
+      updateData.styles = StyleManager.getStyles(cfg.styles);
+    }
+
+    // 3. 处理通用图片（banner/tips）
+    const DEFAULT_TIPS_IMG = '/images/img_tips_default.png';
+
+    if (cfg.banner_image_url) {
+      updateData.bannerImageUrl = StyleManager.getAssetPath(String(cfg.banner_image_url));
+    }
+
+    // 强制刷新 Tips 图片逻辑：优先用配置，无配置用兜底
+    let tipsRaw = cfg.tips_image_url;
+    if (!tipsRaw) tipsRaw = DEFAULT_TIPS_IMG;
+    tipsRaw = String(tipsRaw); // 确保是字符串
+
+    updateData.tipsImageUrl = StyleManager.getAssetPath(tipsRaw);
+    updateData.configAvailable = true;
+
+    this.setData(updateData);
   },
 
   // —— 云端图片解析辅助：fileID -> 临时URL，或直接返回HTTP(S) ——
@@ -104,154 +137,46 @@ Page({
     }
   },
 
-  // —— 读取云端运营图片配置（assets_config/global） ——
-  async loadAssetsConfig() {
-    try {
-      const db = wx.cloud.database();
-      const coll = db.collection('assets_config');
-      let data;
-      try {
-        const doc = await coll.doc('global').get();
-        data = doc && doc.data;
-      } catch (errDoc) {
-        console.warn('assets_config doc("global") 读取失败，尝试集合兜底', errDoc);
-        try {
-          const list = await coll.limit(1).get();
-          data = list && list.data && list.data[0];
-        } catch (errList) {
-          console.warn('assets_config 集合兜底读取失败', errList);
-        }
-      }
-      if (data) {
-        // 支持多命名：*_url / *_fileid / *
-        const bannerRaw = data.makeup_banner_url || data.makeup_banner_fileid || data.makeup_banner || '';
-        const tipsRaw = data.makeup_tips_url || data.makeup_tips_fileid || data.makeup_tips || '';
-        const patch = {};
-        if (bannerRaw && bannerRaw !== this.data.bannerSourceRaw) {
-          const banner = await this.resolveAssetUrl(bannerRaw);
-          if (banner) {
-            patch.bannerImageUrl = banner;
-            patch.bannerSourceRaw = bannerRaw;
-          }
-        }
-        if (tipsRaw && tipsRaw !== this.data.tipsSourceRaw) {
-          const tips = await this.resolveAssetUrl(tipsRaw);
-          if (tips) {
-            patch.tipsImageUrl = tips;
-            patch.tipsSourceRaw = tipsRaw;
-          }
-        }
-        if (Object.keys(patch).length) this.setData(patch);
-      }
-    } catch (e) {
-      console.warn('加载云端运营图片失败（assets_config）', e);
-    }
-  },
-
-  // —— 运营图片实时监听 ——
-  startAssetsWatcher() {
-    try {
-      if (this._assetsWatcher && this._assetsWatcher.close) {
-        try { this._assetsWatcher.close(); } catch (_) {}
-      }
-      const db = wx.cloud.database();
-      const coll = db.collection('assets_config');
-      this._assetsWatcher = coll.doc('global').watch({
-        onChange: async snapshot => {
-          const doc = (snapshot && snapshot.docs && snapshot.docs[0]) || null;
-          if (doc) {
-            const bannerRaw = doc.makeup_banner_url || doc.makeup_banner_fileid || doc.makeup_banner || '';
-            const tipsRaw = doc.makeup_tips_url || doc.makeup_tips_fileid || doc.makeup_tips || '';
-            const patch = {};
-            if (bannerRaw && bannerRaw !== this.data.bannerSourceRaw) {
-              const banner = await this.resolveAssetUrl(bannerRaw);
-              if (banner) {
-                patch.bannerImageUrl = banner;
-                patch.bannerSourceRaw = bannerRaw;
-              }
-            }
-            if (tipsRaw && tipsRaw !== this.data.tipsSourceRaw) {
-              const tips = await this.resolveAssetUrl(tipsRaw);
-              if (tips) {
-                patch.tipsImageUrl = tips;
-                patch.tipsSourceRaw = tipsRaw;
-              }
-            }
-            if (Object.keys(patch).length) this.setData(patch);
-          }
-        },
-        onError: err => {
-          console.error('makeup 运营图片监听错误（doc global），尝试集合监听兜底', err);
-          // 集合监听兜底：当不存在 global 文档或无权限时，监听整个集合
-          try {
-            if (this._assetsWatcher && this._assetsWatcher.close) {
-              try { this._assetsWatcher.close(); } catch (_) {}
-            }
-            this._assetsWatcher = coll.where({}).watch({
-              onChange: async snap => {
-                const d = (snap && snap.docs && snap.docs[0]) || null;
-                if (d) {
-                  const bannerRaw = d.makeup_banner_url || d.makeup_banner_fileid || d.makeup_banner || '';
-                  const tipsRaw = d.makeup_tips_url || d.makeup_tips_fileid || d.makeup_tips || '';
-                  const patch = {};
-                  if (bannerRaw && bannerRaw !== this.data.bannerSourceRaw) {
-                    const banner = await this.resolveAssetUrl(bannerRaw);
-                    if (banner) {
-                      patch.bannerImageUrl = banner;
-                      patch.bannerSourceRaw = bannerRaw;
-                    }
-                  }
-                  if (tipsRaw && tipsRaw !== this.data.tipsSourceRaw) {
-                    const tips = await this.resolveAssetUrl(tipsRaw);
-                    if (tips) {
-                      patch.tipsImageUrl = tips;
-                      patch.tipsSourceRaw = tipsRaw;
-                    }
-                  }
-                  if (Object.keys(patch).length) this.setData(patch);
-                }
-              },
-              onError: e2 => console.error('makeup 集合监听兜底失败', e2)
-            });
-          } catch (e2) {
-            console.error('makeup 启动集合监听兜底异常', e2);
-          }
-        }
-      });
-    } catch (e) {
-      console.error('makeup 开启运营图片监听失败', e);
-    }
-  },
-  stopAssetsWatcher() {
-    if (this._assetsWatcher && this._assetsWatcher.close) {
-      try { this._assetsWatcher.close(); } catch (_) {}
-      this._assetsWatcher = null;
-    }
-  },
-
-  // 读取运营配置（analyze_cost）
+  // 读取运营配置（tryon_cost）
   async loadPointsConfig() {
     try {
-      const app = getApp();
-      if (app.globalData && app.globalData.pointsConfigReady) {
-        const ac = app.globalData.pointsConfig.analyze_cost;
-        const show = (typeof app.globalData.pointsConfig.show_points_section === 'number')
-          ? (app.globalData.pointsConfig.show_points_section > 0)
-          : true;
-        this.setData({ analyzeCost: (typeof ac === 'number') ? ac : this.data.analyzeCost, showPointsSection: show, configAvailable: true });
-        return;
-      }
-      const cfgRes = await wx.cloud.callFunction({ name: 'points', data: { action: 'getConfig' } });
-      if (cfgRes.result && cfgRes.result.success) {
-        const cfg = cfgRes.result.data;
-        const ac2 = cfg.analyze_cost;
-        const show2 = (typeof cfg.show_points_section === 'number') ? (cfg.show_points_section > 0) : true;
-        this.setData({ analyzeCost: (typeof ac2 === 'number') ? ac2 : this.data.analyzeCost, showPointsSection: show2, configAvailable: true });
-        if (app.globalData) { app.globalData.pointsConfig = cfg; app.globalData.pointsConfigReady = true }
+      const db = wx.cloud.database();
+      const res = await db.collection('points_config').doc('global').get();
+      const data = res.data || {};
+      const hasStyles = data.styles && Array.isArray(data.styles) && data.styles.length > 0;
+
+      if (hasStyles) {
+        this._applyConfig(data);
+
+        // 同步资源
+        StyleManager.syncResources(data).then(hasUpdate => {
+          if (hasUpdate) this._applyConfig(data);
+        });
+
+        const app = getApp();
+        if (app.globalData) app.globalData.pointsConfig = data;
+        wx.setStorageSync('pointsConfig', data);
+      } else {
+        // 显式调用云函数修复
+        const cfgRes = await wx.cloud.callFunction({
+          name: 'points',
+          data: { action: 'getConfig' }
+        });
+
+        if (cfgRes.result && cfgRes.result.success) {
+          const cfg = cfgRes.result.data;
+          this._applyConfig(cfg);
+
+          const app = getApp();
+          if (app.globalData) app.globalData.pointsConfig = cfg;
+          wx.setStorageSync('pointsConfig', cfg);
+        } else {
+          this.startConfigPolling();
+        }
       }
     } catch (e) {
-      this.setData({ configAvailable: false });
-      wx.showToast({ title: '消耗点数失败，请稍后重试', icon: 'none' });
+      console.error('[Config] Load failed:', e);
+      this.startConfigPolling();
     }
   },
 
@@ -285,14 +210,14 @@ Page({
     if (this.data.isUploading) {
       return;
     }
-    
+
     const that = this;
-    
+
     // 设置加载状态
     this.setData({
       isUploading: true
     });
-    
+
     wx.chooseMedia({
       count: 1,
       mediaType: ['image'],
@@ -303,7 +228,7 @@ Page({
         const tempFile = res.tempFiles[0];
         const tempFilePath = tempFile.tempFilePath;
         const fileSize = tempFile.size;
-        
+
         // 文件格式验证
         if (!that.validateFileFormat(tempFilePath)) {
           wx.showToast({
@@ -311,16 +236,16 @@ Page({
             icon: 'none',
             duration: 2000
           });
-          
+
           that.setData({
             imageUrl: '',
             isUploading: false
           });
-          
+
           console.log('文件格式不支持:', tempFilePath);
           return;
         }
-        
+
         // 文件大小验证
         if (!that.validateFileSize(fileSize)) {
           wx.showToast({
@@ -328,24 +253,24 @@ Page({
             icon: 'none',
             duration: 2000
           });
-          
+
           that.setData({
             imageUrl: '',
             isUploading: false
           });
-          
+
           console.log(`文件大小超限: ${(fileSize / 1024 / 1024).toFixed(2)}MB > 5MB`);
           return;
         }
-        
+
         // 验证通过，设置图片
         that.setData({
           imageUrl: tempFilePath,
           isUploading: false
         });
-        
+
         console.log(`文件验证通过: ${(fileSize / 1024 / 1024).toFixed(2)}MB`);
-        
+
         // 显示成功提示
         wx.showToast({
           title: '图片选择成功',
@@ -357,11 +282,11 @@ Page({
       },
       fail(err) {
         console.error('选择图片失败:', err);
-        
+
         that.setData({
           isUploading: false
         });
-        
+
         wx.showToast({
           title: '选择图片失败',
           icon: 'none',
@@ -376,7 +301,7 @@ Page({
    */
   deleteImage() {
     console.log('deleteImage 函数被调用');
-    
+
     // 直接删除图片，不需要确认弹窗
     this.setData({
       imageUrl: ''
@@ -384,379 +309,7 @@ Page({
     console.log('图片删除完成');
   },
 
-  /**
-   * 上传图片到云存储并获取URL
-   */
-  uploadImageToCloud(filePath) {
-    const extIndex = filePath.lastIndexOf('.');
-    const ext = extIndex !== -1 ? filePath.substring(extIndex + 1).toLowerCase() : 'jpg';
-    const uniqueId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    const cloudPath = `user_makeup_uploads/${uniqueId}.${ext}`;
 
-    this.setData({ isUploading: true });
-    wx.showLoading({ title: '上传中...' });
-
-    this.logEvent('upload-start', { cloudPath, filePath });
-
-    wx.cloud.uploadFile({
-      cloudPath,
-      filePath,
-      success: (res) => {
-        const fileID = res.fileID;
-        this.logEvent('upload-success', { cloudPath, fileID });
-
-      wx.cloud.getTempFileURL({
-          fileList: [fileID]
-        }).then((urlRes) => {
-          const info = urlRes.fileList && urlRes.fileList[0] ? urlRes.fileList[0] : null;
-          const tempFileURL = info ? info.tempFileURL : '';
-
-          this.setData({
-            uploadedFileId: fileID,
-            uploadedTempFileUrl: tempFileURL
-          });
-
-          this.logEvent('url-fetched', { fileID, tempFileURL });
-          // 获取到临时URL后，调用Coze图片分析工作流
-          this.callMakeupWorkflow(tempFileURL);
-        // 上传成功提示留给整体流程完成后再统一提示
-        }).catch((err) => {
-          this.logEvent('url-fetch-fail', { error: err });
-          wx.showToast({ title: '获取URL失败', icon: 'none' });
-        }).finally(() => {
-          this.setData({ isUploading: false });
-          // 由整体流程控制遮罩显示/隐藏
-        });
-      },
-      fail: (err) => {
-        this.logEvent('upload-fail', { cloudPath, error: err });
-        wx.showToast({ title: '上传失败', icon: 'none' });
-        this.setData({ isUploading: false });
-        this.hideOverlay();
-      },
-      complete: () => {
-        // 仅用于标记流程结束，详细处理在success/fail中
-      }
-    });
-  },
-
-  /**
-   * 调用Coze图片分析工作流
-   * 使用占位符的API Key与workflow_id，参数仅包含photo（图片URL）
-   * 输出参数：facial_features, skin, makeup, hairstyle, improve, image_prompt
-   */
-  callMakeupWorkflow(photoUrl) {
-    if (!photoUrl) {
-      this.logEvent('coze-call-skip', { reason: 'empty photoUrl' });
-      return Promise.reject(new Error('empty photoUrl'));
-    }
-    // 遮罩层已显示，这里不再使用系统loading
-    this.logEvent('coze-call-start', {
-      alias: 'analyze',
-      photo: photoUrl
-    });
-
-    return coze.callCozeWorkflow({
-      alias: 'analyze',
-      parameters: { photo: photoUrl }
-    })
-      .then((res) => {
-        let parsed;
-        try {
-          parsed = coze.parseWorkflowResponse(res);
-        } catch (e) {
-          this.logEvent('coze-parse-fail', { error: e && e.message });
-          wx.showToast({ title: '结果解析失败', icon: 'none' });
-          throw e;
-        }
-
-        const outputs = {
-          facial_features: parsed.facial_features || '',
-          skin: parsed.skin || '',
-          makeup: parsed.makeup || '',
-          hairstyle: parsed.hairstyle || '',
-          improve: parsed.improve || '',
-          image_prompt: parsed.image_prompt || ''
-        };
-
-        // 打印到调试台
-        this.logEvent('coze-result', outputs);
-        return outputs;
-      })
-      .catch((err) => {
-        // 仅记录并传播错误，由上层统一提示，避免重复弹窗
-        const wfErr = (err instanceof Error)
-          ? err
-          : new Error((err && err.errMsg) ? err.errMsg : String(err));
-        // 标记错误类型供上层识别
-        // @ts-ignore
-        wfErr.code = 'WORKFLOW_FAILED';
-        this.logEvent('coze-call-fail', { error: wfErr && wfErr.message });
-        throw wfErr;
-      });
-  },
-
-  /**
-   * 显示/隐藏遮罩
-   */
-  showOverlay() {
-    this.setData({ overlayVisible: true });
-  },
-  hideOverlay() {
-    this.setData({ overlayVisible: false });
-  },
-  preventTouchMove() {},
-  blockTap() {},
-
-  /**
-   * 统一流程：显示遮罩 -> 上传图片 -> 调用工作流 -> 跳转结果
-   * 包含120秒超时与错误处理
-   */
-  startAnalysisFlow() {
-    if (!this.data.imageUrl) {
-      wx.showToast({ title: '请先上传图片', icon: 'none' });
-      return;
-    }
-
-    // 显示遮罩并设置超时
-    this.showOverlay();
-    if (this._analysisTimeoutTimer) {
-      clearTimeout(this._analysisTimeoutTimer);
-    }
-    this._analysisTimeoutTimer = setTimeout(() => {
-      this.logEvent('analysis-timeout', { timeoutMs: 120000 });
-      this.hideOverlay();
-      wx.showToast({ title: '网络超时，请重试', icon: 'none' });
-    }, 120000);
-
-    // 先上传，再调用工作流
-    const localPath = this.data.imageUrl;
-    const extIndex = localPath.lastIndexOf('.');
-    const ext = extIndex !== -1 ? localPath.substring(extIndex + 1).toLowerCase() : 'jpg';
-    const uniqueId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    const cloudPath = `user_makeup_uploads/${uniqueId}.${ext}`;
-
-    this.setData({ isUploading: true });
-    wx.cloud.uploadFile({
-      cloudPath,
-      filePath: localPath,
-      success: (res) => {
-        const fileID = res.fileID;
-        wx.cloud.getTempFileURL({ fileList: [fileID] })
-          .then((urlRes) => {
-            const info = urlRes.fileList && urlRes.fileList[0] ? urlRes.fileList[0] : null;
-            const tempFileURL = info ? info.tempFileURL : '';
-            this.setData({ uploadedFileId: fileID, uploadedTempFileUrl: tempFileURL });
-            this.logEvent('url-fetched', { fileID, tempFileURL });
-
-            // 调用工作流
-            return this.callMakeupWorkflow(tempFileURL);
-          })
-          .then((outputs) => {
-            // 成功，隐藏遮罩并跳转
-            clearTimeout(this._analysisTimeoutTimer);
-            this.hideOverlay();
-
-            // 跳转到结果页，携带原图与分析结果
-            const mapped = {
-              face: outputs.facial_features,
-              skin: outputs.skin,
-              makeup: outputs.makeup,
-              hairstyle: outputs.hairstyle,
-              suggestions: outputs.improve,
-              imagePrompt: outputs.image_prompt,
-              photoUrl: this.data.uploadedTempFileUrl
-            };
-
-            // 成功后执行扣减（后付费），不阻塞跳转
-            const need = this.data.analyzeCost || 3;
-            this.postConsumePointsAfterSuccess(need, 'analyze');
-
-            wx.navigateTo({
-              url: `/pages/result/result?imageUrl=${encodeURIComponent(this.data.imageUrl)}`,
-              success: (resNav) => {
-                const ec = resNav.eventChannel;
-                ec && ec.emit('analysisData', mapped);
-              }
-            });
-          })
-          .catch((err) => {
-            // 失败，隐藏遮罩并提示
-            clearTimeout(this._analysisTimeoutTimer);
-            this.hideOverlay();
-            this.logEvent('analysis-fail', { error: err });
-            const isWorkflowErr = err && (err.code === 'WORKFLOW_FAILED');
-            wx.showModal({
-              title: isWorkflowErr ? '工作流调用失败' : '分析失败',
-              content: isWorkflowErr
-                ? '工作流调用失败'
-                : ((err && err.errMsg) ? err.errMsg : (typeof err === 'string' ? err : '网络或服务异常，请重试')),
-              showCancel: false
-            });
-          })
-          .finally(() => {
-            this.setData({ isUploading: false });
-          });
-      },
-      fail: (err) => {
-        clearTimeout(this._analysisTimeoutTimer);
-        this.setData({ isUploading: false });
-        this.hideOverlay();
-        this.logEvent('upload-fail', { cloudPath, error: err });
-        wx.showModal({
-          title: '上传失败',
-          content: (err && err.errMsg) ? err.errMsg : '请检查网络后重试',
-          showCancel: false
-        });
-      }
-    });
-  },
-
-  /**
-   * 日志输出（含时间戳与操作类型）
-   */
-  logEvent(type, payload) {
-    const ts = this.formatTimestamp(new Date());
-    console.log(`[${ts}] [${type}]`, payload || {});
-  },
-
-  /**
-   * 格式化时间戳
-   */
-  formatTimestamp(date) {
-    const pad = (n) => (n < 10 ? `0${n}` : `${n}`);
-    const yyyy = date.getFullYear();
-    const MM = pad(date.getMonth() + 1);
-    const dd = pad(date.getDate());
-    const hh = pad(date.getHours());
-    const mm = pad(date.getMinutes());
-    const ss = pad(date.getSeconds());
-    const ms = `${date.getMilliseconds()}`.padStart(3, '0');
-    return `${yyyy}-${MM}-${dd} ${hh}:${mm}:${ss}.${ms}`;
-  },
-
-  /**
-   * 分析图片
-   */
-  analyzeImage() {
-    if (this.data.overlayVisible) return;
-    if (!this.data.imageUrl) {
-      wx.showToast({ title: '请先上传图片', icon: 'none' });
-      return;
-    }
-    if (!this.data.configAvailable) { wx.showToast({ title: '消耗点数失败，请稍后重试', icon: 'none' }); return; }
-    const need = this.data.analyzeCost;
-    if (this.data.points < need) {
-      wx.showModal({ title: '妆妆蛋不足', content: `立即分析需要消耗${need}点，当前点数不足。`, showCancel: false });
-      return;
-    }
-    wx.navigateTo({ url: `/pages/analyzing/analyzing?imageUrl=${encodeURIComponent(this.data.imageUrl)}&need=${need}` });
-  },
-
-  // 扣减积分并启动分析流程（带一次重试）
-  async consumePointsAndAnalyze(need) {
-    const app = getApp();
-    const tryConsume = async () => {
-      return await wx.cloud.callFunction({ name: 'points', data: { action: 'consume', amount: need, reason: 'analyze' } });
-    }
-    try {
-      let res = await tryConsume();
-      if (!(res.result && res.result.success)) {
-        // 不足或其他错误
-        const code = res.result && res.result.code;
-        if (code === 'INSUFFICIENT') {
-          wx.showModal({ title: '妆妆蛋不足', content: `需要${need}点，当前不足。`, showCancel: false });
-          return;
-        }
-        // 网络等异常，重试一次
-        await new Promise(r => setTimeout(r, 500));
-        res = await tryConsume();
-        if (!(res.result && res.result.success)) {
-          throw new Error(res.result && res.result.message || '扣减失败');
-        }
-      }
-
-      // 更新本地与全局积分
-      const newPoints = (res.result.data && res.result.data.points);
-      if (typeof newPoints === 'number') {
-        this.setData({ points: newPoints });
-        if (app.globalData) {
-          app.globalData.userPoints = newPoints;
-        }
-        wx.setStorageSync('userPoints', newPoints);
-      }
-
-      // 启动分析流程
-      this.startAnalysisFlow();
-    } catch (e) {
-      console.error('扣减积分失败:', e);
-      // 扣减失败需关闭遮罩，避免界面卡住
-      this.hideOverlay();
-      wx.showModal({ title: '网络异常', content: '扣减失败，请稍后重试', showCancel: false });
-    }
-  },
-
-  // 成功后执行资源点扣减（带一次重试），不阻塞用户流程
-  async postConsumePointsAfterSuccess(amount, reason) {
-    try {
-      const app = getApp();
-      const tryConsume = async () => {
-        return await wx.cloud.callFunction({ name: 'points', data: { action: 'consume', amount, reason } });
-      };
-      let res = await tryConsume();
-      if (!(res.result && res.result.success)) {
-        await new Promise(r => setTimeout(r, 500));
-        res = await tryConsume();
-      }
-      if (res.result && res.result.success) {
-        const newPoints = (res.result.data && res.result.data.points);
-        if (typeof newPoints === 'number') {
-          this.setData({ points: newPoints });
-          if (app.globalData) { app.globalData.userPoints = newPoints; }
-          wx.setStorageSync('userPoints', newPoints);
-        }
-      } else {
-        throw new Error(res.result && res.result.message || '扣减失败');
-      }
-    } catch (e) {
-      this.logEvent('post-consume-fail', { reason, error: e && e.message });
-      wx.showToast({ title: '扣减失败，请稍后重试', icon: 'none' });
-    }
-  },
-
-  /**
-   * 执行图片分析（预留接口）
-   */
-  performImageAnalysis() {
-    wx.showLoading({
-      title: '分析中...'
-    });
-
-    // TODO: 调用AI分析接口
-    console.log('开始分析图片:', this.data.imageUrl);
-    
-    // 模拟分析过程
-    setTimeout(() => {
-      wx.hideLoading();
-      
-      // 扣除积分
-      const newPoints = this.data.points - 1;
-      this.setData({
-        points: newPoints
-      });
-      
-      // 更新全局数据
-      const app = getApp();
-      if (app.globalData) {
-        app.globalData.userPoints = newPoints;
-      }
-      
-      // 跳转到分析结果页面
-      wx.navigateTo({
-        url: `/pages/result/result?imageUrl=${encodeURIComponent(this.data.imageUrl)}`
-      });
-    }, 2000);
-  },
 
   /**
    * 生命周期函数--监听页面初次渲染完成
@@ -786,18 +339,12 @@ Page({
   onUnload() {
     this.stopPointsWatcher();
     this.stopConfigWatcher();
-    this.stopAssetsWatcher();
   },
 
   /**
    * 页面相关事件处理函数--监听用户下拉动作
    */
   onPullDownRefresh() {
-    // 分析期间禁用下拉刷新
-    if (this.data.overlayVisible) {
-      wx.stopPullDownRefresh();
-      return;
-    }
     // 正常刷新页面数据
     this.initializeData();
     wx.stopPullDownRefresh();
@@ -814,13 +361,13 @@ Page({
         if (c >= delays.length) { this.startPointsQuickPolling(); return; }
         const d = delays[c];
         this._watchRetryCount = c + 1;
-        if (this._watchRetryTimer) { try { clearTimeout(this._watchRetryTimer) } catch (_) {} }
+        if (this._watchRetryTimer) { try { clearTimeout(this._watchRetryTimer) } catch (_) { } }
         this._watchRetryTimer = setTimeout(() => this.startPointsWatcher(), d);
         return;
       }
       const db = wx.cloud.database();
       if (this._pointsWatcher && this._pointsWatcher.close) {
-        try { this._pointsWatcher.close(); } catch (_) {}
+        try { this._pointsWatcher.close(); } catch (_) { }
       }
       this._pointsWatcher = db.collection('user_points').doc(openid).watch({
         onChange: snapshot => {
@@ -850,7 +397,7 @@ Page({
           return true;
         }
       }
-    } catch (_) {}
+    } catch (_) { }
     return false;
   },
   startPointsQuickPolling() {
@@ -872,7 +419,7 @@ Page({
             return;
           }
         }
-      } catch (_) {}
+      } catch (_) { }
       if (this._quickPollingAttempts >= 5) {
         this.stopPointsQuickPolling();
         this.startPointsPolling();
@@ -881,13 +428,13 @@ Page({
   },
   stopPointsQuickPolling() {
     if (this._quickPollingTimer) {
-      try { clearInterval(this._quickPollingTimer) } catch (_) {}
+      try { clearInterval(this._quickPollingTimer) } catch (_) { }
       this._quickPollingTimer = null;
     }
   },
   stopPointsWatcher() {
     if (this._pointsWatcher && this._pointsWatcher.close) {
-      try { this._pointsWatcher.close(); } catch (_) {}
+      try { this._pointsWatcher.close(); } catch (_) { }
       this._pointsWatcher = null;
     }
     this.stopPointsPolling();
@@ -912,50 +459,64 @@ Page({
   },
   stopPointsPolling() {
     if (this._pointsPollingTimer) {
-      try { clearInterval(this._pointsPollingTimer); } catch (_) {}
+      try { clearInterval(this._pointsPollingTimer); } catch (_) { }
       this._pointsPollingTimer = null;
     }
   },
 
   // —— 配置实时监听（points_config/global） ——
+  // —— 应用配置到页面数据 ——
+  _applyConfigOld(doc) {
+    const tc = (typeof doc.tryon_cost === 'number') ? doc.tryon_cost : this.data.tryonCost;
+    const show = (typeof doc.show_points_section === 'number') ? (doc.show_points_section > 0) : this.data.showPointsSection;
+
+    // 更新风格列表
+    const styles = StyleManager.getStyles(doc.styles); // 从 StyleManager 获取处理过的风格列表
+    if (styles && Array.isArray(styles)) {
+      this.setData({ styles: styles });
+    }
+
+    this.setData({ tryonCost: tc, showPointsSection: show, configAvailable: true });
+  },
+
+  // —— 实时配置监听 ——
   startConfigWatcher() {
-    try {
-      if (this._configWatchDisabled) return; // 若已判定不可用则不再尝试
-      const db = wx.cloud.database();
-      if (this._configWatcher && this._configWatcher.close) {
-        try { this._configWatcher.close(); } catch (_) {}
-      }
-      this._configWatcher = db.collection('points_config').doc('global').watch({
-        onChange: snapshot => {
+    const db = wx.cloud.database();
+    if (this._configWatcher && this._configWatcher.close) {
+      try { this._configWatcher.close(); } catch (_) { }
+    }
+    this._configWatcher = db.collection('points_config').doc('global')
+      .watch({
+        onChange: async snapshot => {
           const doc = (snapshot && snapshot.docs && snapshot.docs[0]) || null;
           if (doc) {
-            const ac = (typeof doc.analyze_cost === 'number') ? doc.analyze_cost : this.data.analyzeCost;
-            const show = (typeof doc.show_points_section === 'number') ? (doc.show_points_section > 0) : this.data.showPointsSection;
-            this.setData({ analyzeCost: ac, showPointsSection: show, configAvailable: true });
+            const app = getApp(); // Define app here
+            // 1. 先应用当前配置（可能是旧图或缓存图）
+            this._applyConfig(doc);
+
+            // 2. 后台静默同步资源（下载新图）
+            const hasUpdate = await StyleManager.syncResources(doc);
+
+            // 3. 如果资源有更新（下载了新图），再次刷新 UI 以显示新图
+            if (hasUpdate) {
+              this._applyConfig(doc);
+            }
+
+            if (app.globalData) app.globalData.pointsConfig = doc;
+            wx.setStorageSync('pointsConfig', doc);
           }
         },
         onError: err => {
-          console.error('makeup 配置监听错误', err);
-          this._configWatchDisabled = true;
-          // 监听失败时降级为轮询
+          console.error('[Config] watch error', err);
           this.startConfigPolling();
         }
       });
-      this._configWatchActive = true;
-    } catch (e) {
-      console.error('makeup 开启配置监听失败', e);
-      this._configWatchDisabled = true;
-      this._configWatchActive = false;
-      // watch 初始化失败，启用轮询
-      this.startConfigPolling();
-    }
   },
   stopConfigWatcher() {
     if (this._configWatcher && this._configWatcher.close) {
-      try { this._configWatcher.close(); } catch (_) {}
+      try { this._configWatcher.close(); } catch (_) { }
       this._configWatcher = null;
     }
-    this._configWatchActive = false;
     this.stopConfigPolling();
   },
 
@@ -969,12 +530,20 @@ Page({
         const cfgRes = await wx.cloud.callFunction({ name: 'points', data: { action: 'getConfig' } });
         if (cfgRes.result && cfgRes.result.success) {
           const cfg = cfgRes.result.data;
-          const ac = (typeof cfg.analyze_cost === 'number') ? cfg.analyze_cost : this.data.analyzeCost;
-          const show = (typeof cfg.show_points_section === 'number') ? (cfg.show_points_section > 0) : this.data.showPointsSection;
-          if (ac !== this.data.analyzeCost || show !== this.data.showPointsSection) {
-            this.setData({ analyzeCost: ac, showPointsSection: show, configAvailable: true });
+
+          // 1. 应用配置
+          this._applyConfig(cfg);
+
+          // 2. 静默同步资源
+          const hasUpdate = await StyleManager.syncResources(cfg);
+
+          // 3. 资源更新后刷新
+          if (hasUpdate) {
+            this._applyConfig(cfg);
           }
+
           if (app.globalData) app.globalData.pointsConfig = cfg;
+          wx.setStorageSync('pointsConfig', cfg);
         }
       } catch (err) {
         // 静默失败，下一轮继续
@@ -983,7 +552,7 @@ Page({
   },
   stopConfigPolling() {
     if (this._configPollingTimer) {
-      try { clearInterval(this._configPollingTimer); } catch (_) {}
+      try { clearInterval(this._configPollingTimer); } catch (_) { }
       this._configPollingTimer = null;
     }
   },
@@ -1003,5 +572,56 @@ Page({
       title: '化妆品日期记录器 - 妆容分析',
       path: '/pages/makeup/makeup'
     };
+  },
+
+  /**
+   * 选择风格
+   */
+  onSelectStyle(e) {
+    const id = e.currentTarget.dataset.id;
+    this.setData({ selectedStyleId: id });
+  },
+
+  /**
+   * 分析图片
+   */
+  analyzeImage() {
+    if (this.data.isUploading) return;
+    if (!this.data.imageUrl) {
+      wx.showToast({ title: '请先上传图片', icon: 'none' });
+      return;
+    }
+    // 校验风格是否选择
+    if (!this.data.selectedStyleId) {
+      wx.showToast({ title: '请选择一种妆容风格', icon: 'none' });
+      return;
+    }
+
+    if (!this.data.configAvailable) { wx.showToast({ title: '消耗点数失败，请稍后重试', icon: 'none' }); return; }
+
+    const need = this.data.tryonCost;
+    if (this.data.points < need) {
+      wx.showModal({ title: '妆妆蛋不足', content: `立即试妆需要消耗${need}点，当前点数不足。`, showCancel: false });
+      return;
+    }
+    // 传递 imageUrl、styleId 和 styleName
+    const selectedStyle = this.data.styles.find(s => s.id === this.data.selectedStyleId);
+    const styleName = selectedStyle ? selectedStyle.name : '';
+    const url = `/pages/analyzing/analyzing?imageUrl=${encodeURIComponent(this.data.imageUrl)}&need=${need}&styleId=${this.data.selectedStyleId}&styleName=${encodeURIComponent(styleName)}`;
+    wx.navigateTo({ url });
+  },
+
+  onShowTips() {
+    this.setData({ isTipsShow: true });
+  },
+
+  onHideTips() {
+    this.setData({ isTipsShow: false });
+  },
+
+  goPointsPage() {
+    wx.navigateTo({
+      url: '/pages/points/points'
+    });
   }
 })

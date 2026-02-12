@@ -1,262 +1,326 @@
 /* pages/makeup/makeup.wxss */
-.container {
-  padding: 0;
+page {
+  height: 100vh;
+  background-color: #222; /* 深色背景，沉浸感 */
+  overflow: hidden;
+}
+
+.studio-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: #1a1a1a;
+  transition: background-color 0.3s;
+}
+
+.studio-container.empty {
   background-color: #FFF6F7;
-  min-height: 100vh;
 }
 
-/* 顶部banner区域 */
-.banner-section {
-  padding: 32rpx 32rpx 0 32rpx;
-  margin-bottom: 48rpx;
-}
-
-.banner-image {
-  width: 100%;
-  height: 250rpx;
-  border-radius: 20rpx;
-}
-
-/* 图片上传区域 */
-.upload-section {
+/* 1. 预览区 */
+.preview-area {
+  flex: 65; /* 占比 65% */
+  position: relative;
   display: flex;
   justify-content: center;
-  margin-bottom: 48rpx;
+  align-items: center;
+  background-color: #1a1a1a;
+  transition: background-color 0.3s;
 }
 
-.upload-wrapper {
+.preview-area.empty {
+  background-color: #FFF6F7;
+}
+
+.tips-btn {
+  position: absolute;
+  top: 40rpx; /* 状态栏避让 */
+  left: 40rpx; /* 移动到左侧 */
+  z-index: 10;
+  width: 66rpx;
+  height: 66rpx;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  backdrop-filter: blur(4px);
+}
+.tips-btn image { width: 44rpx; height: 44rpx; }
+
+.image-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.flex-column {
+  flex-direction: column;
+  justify-content: flex-start; /* 顶部对齐 */
+  padding-top: 40rpx; /* 距离上方标题栏 40rpx */
+}
+
+.user-image-wrapper {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+}
+
+.inline-tips-img {
+  width: calc(100% - 60rpx); /* 两侧边距各 30rpx */
+  margin: 0 30rpx;
+  border-radius: 20rpx;
+  box-shadow: none; /* 去除阴影 */
+  margin-bottom: 80rpx; /* 扩大间距 */
+}
+
+.user-image {
+  width: 100%;
+  height: 90%;
+}
+
+.reupload-hint {
+  position: absolute;
+  bottom: 80rpx; /* 向上移动，叠加在照片上 */
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+  font-size: 22rpx;
+  padding: 6rpx 20rpx;
+  border-radius: 30rpx;
+  backdrop-filter: blur(4px);
+}
+
+.delete-btn {
+  position: absolute;
+  top: 40rpx;
+  right: 40rpx; /* 移动到右侧 */
+  width: 66rpx;
+  height: 66rpx;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  backdrop-filter: blur(4px);
+  z-index: 11;
+}
+.delete-btn image { width: 40rpx; height: 40rpx; opacity: 0.8; }
+
+
+.placeholder-box {
   display: flex;
   flex-direction: column;
   align-items: center;
 }
 
-.upload-container {
-  width: 320rpx;
-  height: 320rpx;
-  background-color: #ffffff;
-  border: 1rpx solid #e1bfc3;
-  border-radius: 44rpx;
-  position: relative;
+.add-square {
+  width: 260rpx;
+  height: 260rpx;
+  background: #fff;
+  border: 4rpx solid #FFE4E7;
+  border-radius: 40rpx;
   display: flex;
-  align-items: center;
   justify-content: center;
-}
-
-/* 未上传状态 */
-.upload-placeholder {
-  display: flex;
   align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
+  margin-bottom: 24rpx;
 }
 
 .add-icon {
-  width: 96rpx;
-  height: 96rpx;
+  width: 80rpx;
+  height: 80rpx;
 }
 
-.upload-text-wrapper {
-  margin-top: 24rpx;
+/* 只有在没有图片（empty）时才应用粉色主题 */
+.empty .add-icon {
+  opacity: 0.8;
 }
 
-.upload-text {
-  color: #e97885;
-  font-size: 28rpx;
-  text-align: center;
+.add-text {
+  font-size: 30rpx;
+  color: #fff;
+  opacity: 0.6;
 }
 
-/* 已上传状态 */
-.uploaded-container {
-  width: 100%;
-  height: 100%;
+.empty .add-text {
+  color: #E97885;
+  font-weight: bold;
+  opacity: 1;
+}
+
+/* 2. 操作面板 */
+.control-panel {
+  flex: 30; /* 占比从 35% 缩小到 30% 以降低抽屉高度 */
+  background-color: #fff;
+  border-top-left-radius: 40rpx;
+  border-top-right-radius: 40rpx;
+  padding: 30rpx 0 40rpx 0; /* 缩小上下内边距 */
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 -8rpx 30rpx rgba(0,0,0,0.08); /* 增强投影 */
   position: relative;
+  z-index: 10; /* 确保在预览区之上，显示完整投影 */
+  margin-top: -30rpx; /* 向上偏移以覆盖预览区交界 */
 }
 
-.uploaded-image {
-  width: 100%;
-  height: 100%;
-  border-radius: 44rpx;
+.section-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333;
+  margin: 0 30rpx 24rpx 30rpx; /* 恢复标题的左右边距 */
 }
 
-.delete-btn {
-  position: absolute;
-  top: 24rpx;
-  right: 24rpx;
-  width: 36rpx;
-  height: 36rpx;
-  border: none;
-  background: none;
-  padding: 1rpx;
-  z-index: 10;
+.style-list {
+  display: flex;
+  flex-direction: row;
+  white-space: nowrap;
+  height: 240rpx; /* 增加高度以容纳阴影和缩放 */
+  padding: 10rpx 0; /* 垂直内边距，水平间距通过 item margin 控制 */
+  box-sizing: border-box;
+}
+
+.style-item {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  margin-right: 40rpx;
+  padding-top: 10rpx; /* 给顶部缩放留出空间 */
+  opacity: 0.6;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+}
+
+/* 第一个元素增加左边距，确保缩放时不被截断，并满足用户 50rpx 要求 */
+.style-item:first-child {
+  margin-left: 50rpx;
+}
+
+/* 最后一个元素增加右边距，确保缩放时不被截断，并满足用户 50rpx 要求 */
+.style-item:last-child {
+  margin-right: 50rpx;
+}
+.style-item.active {
+  opacity: 1;
+  transform: scale(1.05);
+}
+
+.style-icon {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 24rpx;
+  border: 4rpx solid transparent;
+  background-color: #f7f7f7;
+  margin-bottom: 12rpx;
+}
+
+.style-item.active .style-icon {
+  border-color: #FF9A9E;
+  box-shadow: 0 4rpx 12rpx rgba(255, 154, 158, 0.3);
+}
+
+.style-name {
+  font-size: 26rpx;
+  color: #666;
+}
+.style-item.active .style-name {
+  color: #FF9A9E;
+  font-weight: bold;
+}
+
+/* 底部按钮行 */
+.action-footer {
   display: flex;
   align-items: center;
+  justify-content: space-between; /* 再次改为两端对齐，容纳左侧积分类别 */
+  margin-top: 30rpx; 
+  padding: 0 30rpx;
+}
+
+.points-badge {
+  display: flex;
+  flex-direction: column; /* 垂直排列 */
   justify-content: center;
-}
-
-.delete-icon {
-  width: 34rpx;
-  height: 34rpx;
-  pointer-events: none;
-}
-
-/* 妆妆蛋资源点区域 */
-.points-section {
-  position: fixed;
-  top: 330rpx;
-  right: 16rpx;
-  z-index: 999;
-}
-
-.points-container {
-  position: relative;
-  display: flex;
   align-items: center;
+  background: #F4C00C; /* 黄色背景 */
+  width: 160rpx;
+  height: 88rpx;
+  border-radius: 44rpx; /* 胶囊圆角 */
+  margin-right: 20rpx;
+  flex-shrink: 0;
+  box-shadow: 0 6rpx 16rpx rgba(244, 192, 12, 0.4);
 }
 
 .egg-icon {
   width: 36rpx;
   height: 36rpx;
-  margin-right: 8rpx;
+  margin-right: 0;
+  margin-bottom: 2rpx;
 }
 
-.points-badge {
-  background-color: #f4c00c;
-  border-radius: 32rpx;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  padding: 8rpx 16rpx;
-  box-shadow: 0 4rpx 12rpx rgba(244, 192, 12, 0.3);
+.points-val {
+  color: #794308; /* 深色文字 */
+  font-weight: 800;
+  font-size: 30rpx;
+  line-height: 1;
 }
 
-.points-number {
-  font-size: 32rpx;
-  color: #92404a;
-  font-weight: bold;
+/* .generate-btn 已替换为全局 .btn-primary */
+
+.cost {
+  font-size: 24rpx;
+  font-weight: normal;
+  opacity: 0.9;
+  margin-left: 8rpx;
 }
 
-/* 小贴士区域 */
-.tips-section {
-  margin: 0 0 48rpx 0;
-  display: flex;
-  justify-content: center;
-}
-
-.tips-image {
-  width: 686rpx;
-  height: 272rpx;
-}
-
-/* 立即分析按钮 */
-.analyze-section {
-  margin: 0 32rpx;
-}
-
-.analyze-btn {
-  width: 100%;
-  height: 96rpx;
-  border-radius: 48rpx;
-  border: none;
-  font-size: 32rpx;
-  font-weight: bold;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* 按钮状态 */
-.analyze-btn.disabled {
-  background-color: #FFE4E7 !important;
-  color: #ffffff !important;
-  background: #FFE4E7 !important;
-}
-
-.analyze-btn.disabled::after {
-  border: none !important;
-  background: none !important;
-}
-
-.analyze-btn.active {
-  background-color: #f8acb5;
-  color: #333333;
-}
-
-/* 重置按钮默认样式 */
-.analyze-btn::after {
-  border: none;
-}
-
-/* 积分不足提示文案 */
-.insufficient-hint {
-  margin-top: 16rpx;
-  text-align: center;
-  color: #e97885;
-  font-size: 26rpx;
-}
-
-/* 全屏加载遮罩层 */
-.analysis-overlay {
+/* 提示弹窗 */
+.tips-overlay {
   position: fixed;
   top: 0;
   left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0, 0, 0, 0.6);
-  z-index: 9999;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.3s ease, visibility 0.3s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.analysis-overlay.show {
-  opacity: 1;
-  visibility: visible;
-}
-
-.overlay-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.spinner {
-  width: 80rpx;
-  height: 80rpx;
-  border: 8rpx solid rgba(255, 255, 255, 0.3);
-  border-top-color: #ffffff;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.overlay-text {
-  margin-top: 24rpx;
-  color: #ffffff;
-  font-size: 28rpx;
-}
-
-/* 管理员入口按钮样式 */
-.admin-btn {
-  margin-top: 20rpx;
   width: 100%;
-  height: 88rpx;
-  border-radius: 44rpx;
-  border: none;
-  font-size: 30rpx;
-  font-weight: bold;
+  height: 100%;
+  background: rgba(0,0,0,0.6);
+  z-index: 999;
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #e1bfc3;
-  color: #333333;
 }
 
-.admin-btn::after { border: none; }
+.tips-card {
+  width: 80%;
+  background: #fff;
+  border-radius: 24rpx;
+  padding: 30rpx;
+}
+
+.tips-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20rpx;
+}
+
+.tips-header text {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.close-icon {
+  width: 40rpx;
+  height: 40rpx;
+  opacity: 0.5;
+}
+
+.tips-content {
+  width: 100%;
+  border-radius: 12rpx;
+}

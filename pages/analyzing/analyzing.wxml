@@ -1,6 +1,12 @@
 <view class="container {{playing ? 'play' : 'paused'}}">
-  <image class="timer-image" src="/images/img_jishiqi 1.png" mode="widthFix"></image>
-  <text class="tip-text">小妆正在努力分析中</text>
+  <!-- 核心扫描预览区 -->
+  <view class="scan-container">
+    <image class="user-preview" src="{{imageUrl}}" mode="aspectFill"></image>
+    <view class="scan-bar"></view>
+    <view class="scan-mask"></view>
+  </view>
+  
+  <text class="tip-text">正在为您定制专属妆容...</text>
 
   <view class="carousel">
     <text class="line l1">{{allLines[0]}}</text>

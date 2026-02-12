@@ -16,9 +16,90 @@ text {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* 禁用长按菜单 */
 view,
 text,
 image {
   -webkit-touch-callout: none;
+}
+
+/* —— 全局按钮样式系统 (Global Button System) —— */
+
+/* 主要行动按钮 (Primary) - 粉色渐变 */
+.btn-primary {
+  width: 100% !important;
+  height: 88rpx;
+  line-height: 88rpx;
+  border-radius: 44rpx; /* 全圆角 */
+  background: linear-gradient(90deg, #FF9A9E 0%, #FF7084 100%);
+  color: #FFFFFF;
+  font-size: 34rpx;
+  font-weight: bold;
+  text-align: center;
+  border: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  /* 柔和阴影 */
+  box-shadow: 0 8rpx 20rpx rgba(255, 112, 132, 0.3);
+  transition: transform 0.1s ease-in-out, opacity 0.2s;
+  padding: 0; /* 重置默认内边距 */
+  margin: 0;  /* 重置默认外边距 */
+}
+.btn-primary::after { border: none; }
+
+/* 次要行动按钮 (Secondary) - 描边/白底 */
+.btn-secondary {
+  width: 100% !important;
+  height: 88rpx;
+  line-height: 88rpx;
+  border-radius: 44rpx;
+  background: rgba(255, 255, 255, 0.9);
+  color: #666666;
+  font-size: 32rpx;
+  font-weight: 500;
+  border: 2rpx solid #E0E0E0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+.btn-secondary::after { border: none; }
+
+/* 次要行动按钮 (Secondary) - 深色背景专用 (透明/磨砂) */
+.btn-secondary-dark {
+  width: 100% !important;
+  height: 88rpx;
+  line-height: 88rpx;
+  border-radius: 44rpx;
+  background: rgba(255, 255, 255, 0.15); /* 半透明白 */
+  color: #FFFFFF;
+  font-size: 32rpx;
+  font-weight: 500;
+  border: 2rpx solid rgba(255, 255, 255, 0.3);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  backdrop-filter: blur(4px); /* 磨砂效果 */
+}
+.btn-secondary-dark::after { border: none; }
+
+/* 禁用状态 */
+.btn-disabled, 
+.btn-primary[disabled],
+button[disabled]:not([type]) {
+  background: #F5F5F5 !important;
+  color: #CCCCCC !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+}
+
+/* 点击反馈动效 (需配合 hover-class="btn-hover") */
+.btn-hover {
+  transform: scale(0.96);
+  opacity: 0.9;
 }

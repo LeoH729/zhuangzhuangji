@@ -1,0 +1,78 @@
+<!-- pages/feedback-list/feedback-list.wxml -->
+<view class="container">
+  <!-- 反馈列表 -->
+  <view class="feedback-list">
+    <view class="feedback-item" wx:for="{{feedbackList}}" wx:key="_id" bindtap="onFeedbackDetail" data-id="{{item._id}}">
+      <view class="feedback-header">
+        <text class="feedback-type">{{item.type}}</text>
+        <text class="feedback-time">{{item.createTime}}</text>
+      </view>
+      <view class="feedback-content">{{item.content}}</view>
+      <view class="feedback-footer">
+        <text class="feedback-contact" wx:if="{{item.contact}}">{{item.contact}}</text>
+        <view class="feedback-id-wrapper">
+          <text class="feedback-id">OpenID：{{item.openid}}</text>
+          <text class="copy-btn" catchtap="onCopyOpenid" data-openid="{{item.openid}}">复制</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 空状态 -->
+    <view class="empty-state" wx:if="{{feedbackList.length === 0 && !loading}}">
+      <text class="empty-text">暂无反馈数据</text>
+    </view>
+
+    <!-- 加载中 -->
+    <view class="loading-state" wx:if="{{loading}}">
+      <text>加载中...</text>
+    </view>
+  </view>
+
+  <!-- 反馈详情弹窗 -->
+  <view class="modal" wx:if="{{showDetail}}">
+    <view class="modal-mask" bindtap="onCloseDetail"></view>
+    <view class="modal-content">
+      <view class="modal-header">
+        <text class="modal-title">反馈详情</text>
+        <text class="modal-close" bindtap="onCloseDetail">×</text>
+      </view>
+      <view class="modal-body">
+        <view class="detail-row">
+          <text class="detail-label">反馈类型：</text>
+          <text class="detail-value">{{currentFeedback.type}}</text>
+        </view>
+        <view class="detail-row">
+          <text class="detail-label">反馈内容：</text>
+          <text class="detail-value content-text">{{currentFeedback.content}}</text>
+        </view>
+        <view class="detail-row" wx:if="{{currentFeedback.contact}}">
+          <text class="detail-label">联系方式：</text>
+          <text class="detail-value">{{currentFeedback.contact}}</text>
+        </view>
+        <view class="detail-row">
+          <text class="detail-label">提交时间：</text>
+          <text class="detail-value">{{currentFeedback.createTime}}</text>
+        </view>
+        <view class="detail-row" wx:if="{{currentFeedback.updateTime}}">
+          <text class="detail-label">更新时间：</text>
+          <text class="detail-value">{{currentFeedback.updateTime}}</text>
+        </view>
+        <view class="detail-row">
+          <text class="detail-label">用户OpenID：</text>
+          <view class="openid-wrapper">
+            <text class="detail-value openid-text">{{currentFeedback.openid}}</text>
+            <text class="copy-btn-small" catchtap="onCopyOpenid" data-openid="{{currentFeedback.openid}}">复制</text>
+          </view>
+        </view>
+        <view class="detail-row">
+          <text class="detail-label">管理员回复：</text>
+          <textarea class="reply-input" placeholder="请输入回复内容..." value="{{replyContent}}" bindinput="onReplyInput" maxlength="500"></textarea>
+        </view>
+      </view>
+      <view class="modal-footer">
+        <button class="modal-btn cancel-btn" bindtap="onCloseDetail">取消</button>
+        <button class="modal-btn confirm-btn" bindtap="onUpdateFeedback">保存回复</button>
+      </view>
+    </view>
+  </view>
+</view>

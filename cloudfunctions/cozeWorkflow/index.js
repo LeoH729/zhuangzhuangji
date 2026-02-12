@@ -1,4 +1,4 @@
-// 云函数：代理调用 Coze 工作流（读取密钥与工作流ID）
+// 云函数：代理调用 Coze 工作流（读取密钥与工作流ID）+ 图片转存
 const cloud = require('wx-server-sdk');
 const axios = require('axios');
 
@@ -9,7 +9,12 @@ const db = cloud.database();
 const DEFAULT_BASE_URL = 'https://api.coze.cn/v1/workflow/run';
 
 exports.main = async (event, context) => {
-  const { alias, workflow_id, parameters } = event || {};
+  const { alias, workflow_id, parameters, action } = event || {};
+
+  // 图片转存动作
+  if (action === 'transferImage') {
+    return await transferImageToCloud(event.imageUrl);
+  }
 
   try {
     // 读取密钥与工作流映射
@@ -32,10 +37,16 @@ exports.main = async (event, context) => {
     // 选择最终的工作流ID
     let finalWorkflowId = workflow_id;
     if (!finalWorkflowId && alias) {
+      // 优先直接匹配 (例如 alias='style_001', config key='style_001')
       finalWorkflowId = wfIds[alias];
+
+      // 兼容旧逻辑或特殊前缀 (如果 config key 是 'Style_style_001')
+      if (!finalWorkflowId) {
+        finalWorkflowId = wfIds['Style_' + alias];
+      }
     }
     if (!finalWorkflowId) {
-      return { success: false, code: 'WF_NOT_FOUND', message: '缺少工作流ID或别名映射' };
+      return { success: false, code: 'WF_NOT_FOUND', message: `缺少工作流ID或别名映射 (alias=${alias})` };
     }
 
     // 组装请求
@@ -62,3 +73,34 @@ exports.main = async (event, context) => {
     return { success: false, code: 'HTTP_ERROR', status, message: msg };
   }
 };
+
+// 在云端下载外部图片并上传到云存储（绕过前端域名限制）
+async function transferImageToCloud(imageUrl) {
+  if (!imageUrl) {
+    return { success: false, message: '缺少 imageUrl' };
+  }
+
+  try {
+    // 云端下载（不受域名白名单限制）
+    const response = await axios.get(imageUrl, {
+      responseType: 'arraybuffer',
+      timeout: 30000,
+      maxRedirects: 5
+    });
+
+    const buffer = Buffer.from(response.data);
+    const uniqueId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const cloudPath = `generated_results/${uniqueId}.png`;
+
+    // 上传到云存储
+    const uploadRes = await cloud.uploadFile({
+      cloudPath,
+      fileContent: buffer
+    });
+
+    return { success: true, fileID: uploadRes.fileID };
+  } catch (err) {
+    console.error('[transferImage] error:', err);
+    return { success: false, message: err.message || '图片转存失败' };
+  }
+}

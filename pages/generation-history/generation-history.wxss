@@ -1,0 +1,71 @@
+/* pages/generation-history/generation-history.wxss */
+page {
+  background-color: #FFF6F7;
+}
+.empty-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 200rpx;
+}
+.empty-icon {
+  width: 200rpx;
+  height: 200rpx;
+  margin-bottom: 20rpx;
+  opacity: 0.5;
+}
+.loading-view {
+  text-align: center;
+  padding-top: 100rpx;
+  color: #999;
+}
+.list {
+  padding: 30rpx;
+}
+
+.history-item {
+  background: #fff;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  margin-bottom: 24rpx;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.04);
+}
+
+.result-img {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 12rpx;
+  background-color: #eee;
+  margin-right: 24rpx;
+}
+
+.info-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.style-name {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 12rpx;
+}
+
+.date-time {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.view-btn {
+  background: #FFE4E7;
+  color: #FF7084;
+  font-size: 24rpx;
+  border-radius: 30rpx;
+  padding: 0 30rpx;
+  line-height: 56rpx;
+  font-weight: bold;
+}
+.view-btn::after { border: none; }

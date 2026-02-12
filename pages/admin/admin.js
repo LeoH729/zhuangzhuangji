@@ -20,6 +20,13 @@ Page({
     this.setData({ activityLink: (e && e.detail && e.detail.value) || '' })
   },
 
+  // 跳转到反馈列表页面
+  goFeedbackList() {
+    wx.navigateTo({
+      url: '/pages/feedback-list/feedback-list'
+    })
+  },
+
   onPublishTap() {
     // 仅 UI 占位：不做真实发布
     const nameEmpty = !this.data.activityName.trim()

@@ -8,7 +8,12 @@
     "pages/makeup-generating/makeup-generating",
     "pages/analyzing/analyzing",
     "pages/reference/reference",
-    "pages/admin/admin"
+    "pages/admin/admin",
+    "pages/profile/profile",
+    "pages/points/points",
+    "pages/feedback/feedback",
+    "pages/feedback-list/feedback-list",
+    "pages/generation-history/generation-history"
   ],
   "window": {
     "navigationBarTitleText": "妆妆记",
@@ -31,6 +36,12 @@
         "text": "化妆品",
         "iconPath": "images/icon_list.png",
         "selectedIconPath": "images/icon_list_selected.png"
+      },
+      {
+        "pagePath": "pages/profile/profile",
+        "text": "我的",
+        "iconPath": "images/icon_profile.png",
+        "selectedIconPath": "images/icon_profile_selected.png"
       }
     ],
     "color": "#D0D0D0",

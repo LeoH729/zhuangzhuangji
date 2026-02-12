@@ -1,4 +1,4 @@
-// 云函数：妆妆蛋积分系统（配置、初始化、原子扣减）
+// 云函数：妆妆蛋积分系统（配置、初始化、原子扣减、充值、收支明细）
 const cloud = require('wx-server-sdk')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
@@ -9,11 +9,12 @@ const _ = db.command
 const CONFIG_COLLECTION = 'points_config'
 const CONFIG_ID = 'global'
 const USER_COLLECTION = 'user_points'
+const HISTORY_COLLECTION = 'points_history'
 
 exports.main = async (event, context) => {
   const wxContext = cloud.getWXContext()
-  const { action, amount, reason } = event || {}
-  console.log('[points] entry', { action, amount, reason, openid: wxContext.OPENID })
+  const { action, amount, reason, title } = event || {}
+  console.log('[points] entry', { action, amount, reason, title, openid: wxContext.OPENID })
 
   try {
     switch (action) {
@@ -24,7 +25,11 @@ exports.main = async (event, context) => {
       case 'getUserPoints':
         return await getUserPoints(wxContext.OPENID)
       case 'consume':
-        return await consumePoints(wxContext.OPENID, amount, reason)
+        return await consumePoints(wxContext.OPENID, amount, reason, title)
+      case 'recharge':
+        return await rechargePoints(wxContext.OPENID, amount, reason, title)
+      case 'getHistory':
+        return await getHistory(wxContext.OPENID, event.limit, event.skip)
       default:
         return { success: false, code: 'UNKNOWN_ACTION', message: '未知操作' }
     }
@@ -34,29 +39,68 @@ exports.main = async (event, context) => {
   }
 }
 
+// 默认妆容风格配置
+const DEFAULT_STYLES = [
+  { id: 'style_001', name: '新春红运', icon: '/images/style_new_year_red.png', sort: 10 },
+  { id: 'style_002', name: '富家千金', icon: '/images/style_rich_girl.png', sort: 20 },
+  { id: 'style_003', name: '国泰民安', icon: '/images/style_national_prosperity.png', sort: 30 },
+  { id: 'style_004', name: '港风复古', icon: '/images/style_hk_retro.png', sort: 40 },
+  { id: 'style_005', name: '欧美辣妹', icon: '/images/style_western_hot.png', sort: 50 },
+  { id: 'style_006', name: '伪素颜', icon: '/images/style_natural_bare.png', sort: 60 },
+  { id: 'style_007', name: '日式杂志', icon: '/images/style_jp_magazine.png', sort: 70 }
+]
+
 async function defaultConfig() {
   return {
     name: '妆妆蛋',
     initial_points: 100,
     analyze_cost: 3,
     generate_cost: 5,
-    // 新增：控制前端妆妆蛋资源点区域显示（0 不显示，1 显示）
+    tryon_cost: 3,
     show_points_section: 1,
+    styles: DEFAULT_STYLES, // 加入默认风格
+    banner_image_url: '', // 默认 banner 为空
+    tips_image_url: '/images/icon_tips_small.svg', // 默认 tips 图片
     updatedAt: new Date()
   }
 }
 
-// 获取全局配置（不存在则初始化）
+// 获取全局配置（不存在则初始化，存在但缺styles则补全）
 async function getConfig() {
   try {
     const res = await db.collection(CONFIG_COLLECTION).doc(CONFIG_ID).get()
     if (res.data) {
       console.log('[points] getConfig found existing')
+
+      console.log('[points] getConfig found existing');
+
+      // 如果缺 tips_image_url，补全默认值
+      const updateData = {};
+      let needsUpdate = false;
+
+      if (!res.data.tips_image_url) {
+        updateData.tips_image_url = '/images/icon_tips_small.svg';
+        res.data.tips_image_url = '/images/icon_tips_small.svg';
+        needsUpdate = true;
+      }
+
+      // 如果缺 styles，补全默认值
+      if (!res.data.styles || !Array.isArray(res.data.styles) || res.data.styles.length === 0) {
+        updateData.styles = DEFAULT_STYLES;
+        res.data.styles = DEFAULT_STYLES;
+        needsUpdate = true;
+      }
+
+      if (needsUpdate) {
+        await db.collection(CONFIG_COLLECTION).doc(CONFIG_ID).update({
+          data: updateData
+        });
+      }
+
       return { success: true, data: res.data }
     }
-  } catch (_) {}
+  } catch (_) { }
 
-  // 初始化默认配置
   const cfg = await defaultConfig()
   console.log('[points] getConfig init default')
   await db.collection(CONFIG_COLLECTION).doc(CONFIG_ID).set({ data: cfg })
@@ -75,7 +119,7 @@ async function ensureUserPoints(openid) {
       console.log('[points] ensureUserPoints exists', doc.data)
       return { success: true, data: doc.data }
     }
-  } catch (_) {}
+  } catch (_) { }
 
   const initDoc = {
     points: initPoints,
@@ -96,23 +140,38 @@ async function getUserPoints(openid) {
       return { success: true, data: doc.data }
     }
   } catch (e) {
-    // 若不存在则初始化
     const inited = await ensureUserPoints(openid)
     return inited
   }
 }
 
-// 原子扣减用户积分（事务）
-async function consumePoints(openid, amount, reason = '') {
+// 记录收支流水
+async function addHistory(openid, type, amount, reason, title) {
+  try {
+    await db.collection(HISTORY_COLLECTION).add({
+      data: {
+        _openid: openid,
+        type,        // 'consume' 或 'recharge'
+        amount,      // 正整数
+        reason,      // 'virtual_tryon_hk_retro', 'recharge_180' 等
+        title,       // 显示标题，如 '虚拟试妆-港风复古', '充值-推荐套餐'
+        createdAt: db.serverDate()
+      }
+    })
+  } catch (e) {
+    console.error('[points] addHistory error:', e)
+  }
+}
+
+// 原子扣减用户积分（事务）+ 记录流水
+async function consumePoints(openid, amount, reason = '', title = '') {
   const cfgRes = await getConfig()
   const now = new Date()
-  return await db.runTransaction(async (transaction) => {
-    // 读取用户积分（如不存在则初始化）
+  const result = await db.runTransaction(async (transaction) => {
     let doc
     try {
       doc = await transaction.collection(USER_COLLECTION).doc(openid).get()
     } catch (e) {
-      // 初始化用户文档
       const initPoints = (cfgRes && cfgRes.data && cfgRes.data.initial_points) || 100
       console.log('[points] consume init user doc in tx', { openid, initPoints })
       await transaction.collection(USER_COLLECTION).doc(openid).set({
@@ -139,4 +198,68 @@ async function consumePoints(openid, amount, reason = '') {
     const after = current - amount
     return { success: true, data: { points: after } }
   })
+
+  // 事务成功后记录流水（事务外）
+  if (result && result.success) {
+    const displayTitle = title || reason || '消费'
+    await addHistory(openid, 'consume', amount, reason, displayTitle)
+  }
+  return result
+}
+
+// 充值（暂时跳过支付，直接加积分）+ 记录流水
+async function rechargePoints(openid, amount, reason = '', title = '') {
+  if (typeof amount !== 'number' || amount <= 0) {
+    return { success: false, code: 'BAD_AMOUNT', message: '充值数量不合法' }
+  }
+
+  const now = new Date()
+
+  // 确保用户文档存在
+  await ensureUserPoints(openid)
+
+  // 原子增加积分
+  await db.collection(USER_COLLECTION).doc(openid).update({
+    data: { points: _.inc(amount), updatedAt: now }
+  })
+
+  // 读取更新后的积分
+  const doc = await db.collection(USER_COLLECTION).doc(openid).get()
+  const after = (doc && doc.data && doc.data.points) || 0
+
+  // 记录流水
+  const displayTitle = title || `充值${amount}蛋`
+  await addHistory(openid, 'recharge', amount, reason, displayTitle)
+
+  return { success: true, data: { points: after } }
+}
+
+// 获取收支明细
+async function getHistory(openid, limit = 20, skip = 0) {
+  const res = await db.collection(HISTORY_COLLECTION)
+    .where({ _openid: openid })
+    .orderBy('createdAt', 'desc')
+    .skip(skip)
+    .limit(limit)
+    .get()
+
+  // 格式化时间
+  const list = (res.data || []).map(item => {
+    let timeStr = ''
+    if (item.createdAt) {
+      const d = new Date(item.createdAt)
+      const pad = n => String(n).padStart(2, '0')
+      timeStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+    }
+    return {
+      id: item._id,
+      action: item.type,
+      amount: item.amount,
+      reason: item.reason,
+      title: item.title,
+      time: timeStr
+    }
+  })
+
+  return { success: true, data: list }
 }

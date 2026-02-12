@@ -1,6 +1,23 @@
 <view class="container">
   <view class="header">
-    <text class="title">管理员消息发布</text>
+    <text class="title">管理员控制台</text>
+  </view>
+
+  <!-- 功能菜单 -->
+  <view class="menu-list">
+    <view class="menu-item" bindtap="goFeedbackList">
+      <view class="menu-left">
+        <text class="menu-title">用户反馈</text>
+        <text class="menu-desc">查看和处理用户反馈</text>
+      </view>
+      <image class="menu-arrow" src="/images/arrow_right.svg"></image>
+    </view>
+  </view>
+
+  <view class="section-divider"></view>
+
+  <view class="header">
+    <text class="title">消息发布</text>
     <text class="subtitle">仅做 UI 展示，暂不实现发布功能</text>
   </view>
 
