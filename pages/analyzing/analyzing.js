@@ -1,223 +1,208 @@
-const coze = require('../../docs/coze_workflow_api_reference.js')
+const app = getApp()
+
+const POLL_INTERVAL_MS = 8000
+const POLL_TIMEOUT_MS = 5 * 60 * 1000
+const ENSURE_WORKER_INTERVAL_MS = 30000
+
 Page({
   data: {
-    imageUrl: '',
-    need: 0,
-    styleId: '', // 选定的妆容风格 ID
-    styleName: '', // 风格名称（用于流水记录）
-    allLines: ['面部特征提取中...', '正在匹配妆容风格...', '光影融合渲染中...', '生成专属妆容...', '即将完成...'],
-    playing: true,
-    _analysisTimeoutTimer: null
+    featureId: '',
+    images: [],
+    progress: 5,
+    statusText: '正在提交任务...',
+    taskId: ''
   },
+
   onLoad(options) {
-    const url = options && options.imageUrl ? decodeURIComponent(options.imageUrl) : ''
-    const need = options && options.need ? parseInt(options.need, 10) : 0
-    const styleId = options && options.styleId ? options.styleId : ''
-    const styleName = options && options.styleName ? decodeURIComponent(options.styleName) : ''
-
-    this.setData({ imageUrl: url, need, styleId, styleName })
-    this.startAnalysisFlow()
-  },
-  onShow() {
-    this.setData({ playing: true })
-  },
-  startAnalysisFlow() {
-    if (!this.data.imageUrl) {
-      wx.showToast({ title: '图片不可用', icon: 'none' })
-      return
+    if (options.featureId && options.images) {
+      this.setData({
+        featureId: options.featureId,
+        images: JSON.parse(decodeURIComponent(options.images))
+      })
+      this.pollStartedAt = Date.now()
+      this.lastEnsureWorkerAt = 0
+      this.startProgress()
+      this.startAsyncGeneration()
+    } else {
+      wx.showToast({ title: '参数错误', icon: 'none' })
+      setTimeout(() => wx.navigateBack(), 1500)
     }
-    if (!this.data.styleId) {
-      wx.showToast({ title: '未选择风格', icon: 'none' })
-      return
-    }
+  },
 
-    // 设置超时保护 (120秒)
-    if (this._analysisTimeoutTimer) clearTimeout(this._analysisTimeoutTimer)
-    this._analysisTimeoutTimer = setTimeout(() => {
-      wx.showToast({ title: '生成超时，请重试', icon: 'none' })
-      setTimeout(() => this.handleFail({ message: 'timeout' }), 1500)
-    }, 120000)
-
-    // Step 1: 上传图片到云存储
-    const localPath = this.data.imageUrl
-    const extIndex = localPath.lastIndexOf('.')
-    const ext = extIndex !== -1 ? localPath.substring(extIndex + 1).toLowerCase() : 'jpg'
-    const uniqueId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-    const cloudPath = `user_makeup_uploads/${uniqueId}.${ext}`
-
-    wx.cloud.uploadFile({
-      cloudPath,
-      filePath: localPath,
-      success: (uploadRes) => {
-        const fileID = uploadRes.fileID
-        // Step 2: 获取临时访问 URL
-        wx.cloud.getTempFileURL({ fileList: [fileID] }).then((urlRes) => {
-          const info = urlRes.fileList && urlRes.fileList[0] ? urlRes.fileList[0] : null
-          const tempFileURL = info ? info.tempFileURL : ''
-
-          if (!tempFileURL) {
-            clearTimeout(this._analysisTimeoutTimer)
-            this.handleFail({ message: '获取图片链接失败' })
-            return
-          }
-
-          // Step 3: 调用 Coze 工作流（使用 styleId 作为 alias，云函数会自动添加 Style_ 前缀查找）
-          const alias = this.data.styleId
-          const params = { photo: tempFileURL }
-
-          console.log('[Coze] 调用工作流, alias:', alias, ', photo:', tempFileURL)
-
-          coze.callCozeWorkflow({ alias, parameters: params }).then(async (res) => {
-            clearTimeout(this._analysisTimeoutTimer)
-
-            // 调试：打印云函数/Coze 原始返回
-            console.log('[Coze] 云函数原始返回:', JSON.stringify(res))
-
-            // 检查 Coze API 层面的错误
-            if (res && res.code && res.code !== 0) {
-              console.error('[Coze] API 返回错误码:', res.code, ', msg:', res.msg || res.message)
-              this.handleFail({ message: `Coze错误: ${res.msg || res.message || res.code}` })
-              return
-            }
-
-            // 检查云函数层面的错误
-            if (res && res.success === false) {
-              console.error('[Coze] 云函数返回失败:', res.code, res.message)
-              this.handleFail({ message: res.message || '云函数调用失败' })
-              return
-            }
-
-            // Step 4: 解析响应
-            let parsed
-            try {
-              parsed = coze.parseWorkflowResponse(res)
-            } catch (parseErr) {
-              console.error('[Coze] 解析失败, 原始数据:', JSON.stringify(res))
-              console.error('[Coze] 解析错误:', parseErr)
-              this.handleFail({ message: '解析生成结果失败' })
-              return
-            }
-            console.log('[Coze] 工作流返回解析结果:', parsed)
-
-            const mapped = {
-              photoUrl: tempFileURL,
-              resultUrl: parsed.output_image || parsed.image || parsed.url || parsed.output || '',
-              styleId: this.data.styleId
-            }
-
-            if (!mapped.resultUrl) {
-              console.error('[Coze] 未能从返回中提取生成图 URL, parsed:', JSON.stringify(parsed))
-              this.handleFail({ message: '未获取到生成图片' })
-              return
-            }
-
-            // Step 4.5: 将外部图片转存到云存储（避免域名白名单问题）
-            try {
-              const cloudResultUrl = await this.transferImageToCloud(mapped.resultUrl)
-              if (cloudResultUrl) {
-                mapped.resultUrl = cloudResultUrl
-                console.log('[Transfer] 图片已转存到云存储:', cloudResultUrl)
-              }
-            } catch (transferErr) {
-              console.warn('[Transfer] 转存失败，将使用原始 URL:', transferErr)
-            }
-
-            // Step 5: 扣费
-            const need = this.data.need || 0
-            if (need > 0) {
-              const displayTitle = '虚拟试妆-' + (this.data.styleName || this.data.styleId)
-              this.postConsumePointsAfterSuccess(need, 'virtual_tryon_' + this.data.styleId, displayTitle)
-            }
-
-            // Step 5.5: 保存生成记录到数据库
-            this.saveGenerationRecord(mapped)
-
-            // Step 6: 存储结果并跳转结果页
-            wx.setStorageSync('analysisData', mapped)
-            wx.redirectTo({
-              url: `/pages/result/result?imageUrl=${encodeURIComponent(this.data.imageUrl)}`
-            })
-          }).catch((err) => {
-            clearTimeout(this._analysisTimeoutTimer)
-            console.error('[Coze] 工作流调用失败:', err)
-            this.handleFail(err)
-          })
-        }).catch((err) => {
-          clearTimeout(this._analysisTimeoutTimer)
-          console.error('[Upload] 获取临时URL失败:', err)
-          this.handleFail(err)
-        })
-      },
-      fail: (err) => {
-        clearTimeout(this._analysisTimeoutTimer)
-        console.error('[Upload] 上传图片失败:', err)
-        this.handleFail(err)
+  startProgress() {
+    this.progressInterval = setInterval(() => {
+      const current = this.data.progress
+      if (current < 92) {
+        const inc = Math.max(0.4, (95 - current) / 24)
+        this.setData({ progress: current + inc })
       }
-    })
+    }, 800)
   },
-  // 将外部图片通过云函数转存到云存储（绕过前端域名白名单限制）
-  async transferImageToCloud(externalUrl) {
-    const res = await wx.cloud.callFunction({
-      name: 'cozeWorkflow',
-      data: { action: 'transferImage', imageUrl: externalUrl }
-    })
-    if (res.result && res.result.success && res.result.fileID) {
-      return res.result.fileID
+
+  stopProgress() {
+    if (this.progressInterval) {
+      clearInterval(this.progressInterval)
+      this.progressInterval = null
     }
-    throw new Error((res.result && res.result.message) || '图片转存失败')
   },
-  // 保存生成记录到数据库
-  async saveGenerationRecord(mapped) {
+
+  stopPolling() {
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval)
+      this.pollInterval = null
+    }
+  },
+
+  // 弃用客户端直调 generationWorker 以免微信客户端 15 秒限制抛出 "Error: timeout" 报错。
+  // 现已统一由后台 ensureWorker 异步拉起，更稳定且控制台不再报红。
+  triggerWorker(taskId) {
+    console.log('[analyzing] triggerWorker 已弃用，由 ensureWorker 异步拉起。')
+  },
+
+  async startAsyncGeneration() {
     try {
-      const db = wx.cloud.database()
-      await db.collection('generation_history').add({
+      const createRes = await wx.cloud.callFunction({
+        name: 'aiGenerate',
         data: {
-          styleId: this.data.styleId,
-          styleName: this.data.styleName || this.data.styleId,
-          resultUrl: mapped.resultUrl,
-          photoUrl: mapped.photoUrl,
-          createdAt: db.serverDate()
+          action: 'createTask',
+          featureId: this.data.featureId,
+          imageUrls: this.data.images
         }
       })
-      console.log('[Record] 生成记录保存成功')
-    } catch (e) {
-      console.error('[Record] 保存生成记录失败:', e)
+
+      const result = createRes.result
+      if (!result || !result.success || !result.taskId) {
+        this.stopProgress()
+        wx.showToast({ title: result?.error || '提交任务失败', icon: 'none' })
+        setTimeout(() => wx.navigateBack(), 2000)
+        return
+      }
+
+      this.setData({
+        taskId: result.taskId,
+        statusText: '任务已提交，AI 正在绘制中...'
+      })
+      app.trackGenerationTask(result.taskId)
+
+      this.pollInterval = setInterval(() => {
+        this.pollTaskStatus(result.taskId)
+      }, POLL_INTERVAL_MS)
+
+      this.pollTaskStatus(result.taskId)
+    } catch (err) {
+      console.error(err)
+      this.stopProgress()
+      wx.showToast({ title: '网络错误', icon: 'none' })
+      setTimeout(() => wx.navigateBack(), 2000)
     }
   },
-  async postConsumePointsAfterSuccess(amount, reason, title) {
-    try {
-      const app = getApp()
-      const tryConsume = async () => {
-        return await wx.cloud.callFunction({ name: 'points', data: { action: 'consume', amount, reason, title } })
-      }
-      let res = await tryConsume()
-      if (!(res.result && res.result.success)) {
-        await new Promise(r => setTimeout(r, 500))
-        res = await tryConsume()
-      }
-      if (res.result && res.result.success) {
-        const newPoints = (res.result.data && res.result.data.points)
-        if (typeof newPoints === 'number') {
-          if (app.globalData) { app.globalData.userPoints = newPoints }
-          wx.setStorageSync('userPoints', newPoints)
+
+  async pollTaskStatus(taskId) {
+    if (this.isPollingRequest) {
+      return
+    }
+
+    if (Date.now() - this.pollStartedAt > POLL_TIMEOUT_MS) {
+      this.stopPolling()
+      this.stopProgress()
+      wx.showModal({
+        title: '生成时间较长',
+        content: '任务仍在后台执行，你可以返回上一页稍后在历史记录中查看结果。',
+        confirmText: '继续等待',
+        cancelText: '返回',
+        success: (res) => {
+          if (res.confirm) {
+            this.pollStartedAt = Date.now()
+            this.startProgress()
+            this.pollInterval = setInterval(() => {
+              this.pollTaskStatus(taskId)
+            }, POLL_INTERVAL_MS)
+            this.pollTaskStatus(taskId)
+          } else {
+            wx.navigateBack()
+          }
         }
+      })
+      return
+    }
+
+    this.isPollingRequest = true
+    try {
+      const statusRes = await wx.cloud.callFunction({
+        name: 'aiGenerate',
+        data: {
+          action: 'getTaskStatus',
+          taskId
+        }
+      })
+
+      const result = statusRes.result
+      if (!result || !result.success || !result.task) {
+        return
       }
-    } catch (_) { }
-  },
-  handleFail(err) {
-    wx.switchTab({
-      url: '/pages/makeup/makeup',
-      success: () => {
-        wx.showToast({ title: '分析失败，请重试', icon: 'none', duration: 2000 })
+
+      const task = result.task
+      if (task.status === 'pending' || task.status === 'running') {
+        const now = Date.now()
+        const shouldEnsureWorker =
+          task.status === 'pending' &&
+          now - this.pollStartedAt > 15000 &&
+          now - (this.lastEnsureWorkerAt || 0) > ENSURE_WORKER_INTERVAL_MS
+        if (shouldEnsureWorker) {
+          this.lastEnsureWorkerAt = now
+          wx.cloud.callFunction({
+            name: 'aiGenerate',
+            data: {
+              action: 'ensureWorker',
+              taskId
+            }
+          }).catch((err) => {
+            console.error('[analyzing] ensureWorker failed', err)
+          })
+        }
+        this.setData({
+          statusText: task.status === 'running' ? 'AI 正在绘制中...' : '任务排队中...'
+        })
+        return
       }
-    })
+
+      this.stopPolling()
+      this.stopProgress()
+
+      if (task.status === 'succeeded') {
+        app.finishTrackedGenerationTask(taskId, { silent: true })
+        this.setData({ progress: 100, statusText: '生成完成' })
+        setTimeout(() => {
+          wx.redirectTo({
+            url: `/pages/result/result?id=${task.historyId}&url=${encodeURIComponent(task.resultUrl)}`
+          })
+        }, 500)
+        return
+      }
+
+      if (task.status === 'failed') {
+        app.finishTrackedGenerationTask(taskId, { silent: true })
+        wx.showToast({
+          title: task.errorMessage || '生成失败',
+          icon: 'none'
+        })
+        setTimeout(() => wx.navigateBack(), 2000)
+      }
+    } catch (err) {
+      console.error('[analyzing] poll failed', err)
+    } finally {
+      this.isPollingRequest = false
+    }
   },
-  onHide() {
-    this.setData({ playing: false })
-    if (this._analysisTimeoutTimer) { try { clearTimeout(this._analysisTimeoutTimer) } catch (_) { } this._analysisTimeoutTimer = null }
-  },
+
   onUnload() {
-    this.setData({ playing: false })
-    if (this._analysisTimeoutTimer) { try { clearTimeout(this._analysisTimeoutTimer) } catch (_) { } this._analysisTimeoutTimer = null }
+    this.stopProgress()
+    this.stopPolling()
+  },
+
+  goHome() {
+    wx.switchTab({
+      url: '/pages/index/index'
+    })
   }
 })

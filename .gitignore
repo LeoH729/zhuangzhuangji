@@ -16,6 +16,7 @@ node_modules/
 # 临时文件
 *.tmp
 *.temp
+local-relay-gpt-image-2-*
 
 # 系统文件
 Thumbs.db

@@ -1,24 +1,24 @@
-<!--pages/points/points.wxml-->
-<view class="container">
+<view class="container pb-safe">
+  <view wx:if="{{generationNotice.visible}}" class="generation-notice" bindtap="onGenerationNoticeTap">
+    <view class="generation-notice-dot">✓</view>
+    <text class="generation-notice-text">{{generationNotice.message}}</text>
+    <text class="generation-notice-action">查看</text>
+  </view>
+
   <!-- 当前余额 -->
   <view class="balance-card">
-    <text class="balance-label">当前妆妆蛋</text>
+    <view class="balance-title">当前可用星光</view>
     <view class="balance-value">
-      <image class="egg-icon" src="/images/icon_zzj_egg.svg" mode="aspectFit"></image>
       <text class="points-num">{{points}}</text>
     </view>
   </view>
 
   <!-- 充值套餐 -->
-  <view class="section-title">充值套餐</view>
+  <view class="section-title">获取星光</view>
   <view class="options-grid">
     <block wx:for="{{rechargeOptions}}" wx:key="id">
-      <view 
-        class="option-item {{selectedOptionId === item.id ? 'active' : ''}}" 
-        bindtap="selectOption" 
-        data-id="{{item.id}}"
-      >
-        <view class="option-amount">{{item.amount}}蛋</view>
+      <view class="option-item {{selectedOptionId === item.id ? 'active' : ''}}" bindtap="selectOption" data-id="{{item.id}}">
+        <view class="option-amount">{{item.amount}} 星光</view>
         <view class="option-price">¥ {{item.price}}</view>
         <view class="option-tag" wx:if="{{item.tag}}">{{item.tag}}</view>
       </view>
@@ -27,27 +27,26 @@
 
   <!-- 充值按钮 -->
   <view class="action-area">
-    <button class="btn-primary" hover-class="btn-hover" bindtap="onRecharge">立即充值</button>
-    <view class="tips">点击充值即代表同意《用户充值协议》</view>
+    <button class="btn-primary {{isRecharging ? 'btn-disabled' : ''}}" hover-class="btn-hover" bindtap="onRecharge" disabled="{{isRecharging}}">
+      {{isRecharging ? '处理中...' : '立即购买'}}
+    </button>
   </view>
 
   <!-- 收支明细 -->
-  <view class="section-title history-title">收支明细</view>
-  <scroll-view scroll-y class="history-list">
-    <block wx:for="{{historyList}}" wx:key="id">
+  <view class="section-title history-title">明细</view>
+  <view class="history-list">
+    <block wx:for="{{historyList}}" wx:key="_id">
       <view class="history-item">
         <view class="left">
-          <text class="item-title">{{item.title}}</text>
-          <text class="item-time">{{item.time}}</text>
+          <text class="item-title">{{item.description || item.title || '消费'}}</text>
+          <text class="item-time">{{item.time || item.createTime}}</text>
         </view>
-        <view class="right {{item.action === 'recharge' ? 'plus' : 'minus'}}">
-          {{item.action === 'recharge' ? '+' : '-'}}{{item.amount}}
+        <view class="right {{item.type === 'recharge' || item.action === 'recharge' ? 'plus' : 'minus'}}">
+          {{item.type === 'recharge' || item.action === 'recharge' ? '+' : '-'}}{{item.amount}}
         </view>
       </view>
     </block>
     <!-- 空状态 -->
-    <view class="empty-view" wx:if="{{historyList.length === 0}}">
-      <text>暂无记录</text>
-    </view>
-  </scroll-view>
+    <view class="empty-view" wx:if="{{historyList.length === 0}}">暂无记录</view>
+  </view>
 </view>

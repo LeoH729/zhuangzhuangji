@@ -1,0 +1,36 @@
+{
+    "name": "王家卫风格",
+    "group": "写真",
+    "home_banner": "cloud://...",
+    "detail_banner": "cloud://...",
+    "upload_count": 1,
+    "points_cost": 5,
+    "model_call_id": "volcengine_doubao_001",
+    "prompt": "摄影写真 慢门摄影 王家卫电影感 抽帧摄影 延时摄影 创意人像摄影 青橙色调 港风街拍摄影 地铁站 人来人往 光线虚化模糊 形成模糊的拖影 柔焦摄影 深邃迷离的眼神 艺术氛围感",
+    "status": 1,
+    "sort": 10
+}
+{
+    "name": "2026好运涂鸦",
+    "group": "写真",
+    "home_banner": "cloud://...",
+    "detail_banner": "cloud://...",
+    "upload_count": 1,
+    "points_cost": 5,
+    "model_call_id": "volcengine_doubao_001",
+    "prompt": "一个女孩站在一面巨大的彩色涂鸦墙前，墙上是她自己的卡通化肖像，笑容灿烂 涂鸦墙上写着“2026好运”，色彩鲜艳，充满活力 女孩穿着不变 地面上散落着彩色颜料的斑点，营造出艺术创作的氛围 整体画面色彩丰富、充满童趣，充满未来的希望与祝福",
+    "status": 1,
+    "sort": 20
+}
+{
+    "name": "金粉素描",
+    "group": "写真",
+    "home_banner": "cloud://...",
+    "detail_banner": "cloud://...",
+    "upload_count": 1,
+    "points_cost": 8,
+    "model_call_id": "volcengine_doubao_001",
+    "prompt": "在暗冷灰空白卡纸上，画出人物简笔速写，大写写意风格，线条流畅极简，线条勾勒造型，自由挥洒，狂草肆意，没有明暗层次，大量留白，侧逆光，受光处自带闪粉橘黄金，十分贵气（暖光部分为自发光，发光处有强烈的辉光效果），明暗对比强烈画面内容：人物的侧脸，超特写五官，（光影构思巧妙）（（其他地方一笔概括），线条速写，45度正侧脸，画面底部带有手写风格的文字“2026.05”",
+    "status": 1,
+    "sort": 30
+}

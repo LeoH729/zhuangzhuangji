@@ -1,182 +1,154 @@
-# 妆妆记 - 云开发部署指南
+# AI 生图小程序 - 云开发部署指南
 
-## 概述
-本项目已完成微信云开发集成，包含用户认证、云数据库存储和定时提醒功能。
+本项目采用纯云开发架构。部署前，请确保已经在微信开发者工具中开通了云开发服务。
 
-## 云开发环境配置
-- 环境ID: `cloudbase-5gmfinom29f48930`
-- 订阅消息模板ID: `Bt7Mmwj4cz-klq4dBnp1EZ_L9ovLeZykyk5atwzcjgY`
+## 1. 部署云函数
+你需要依次右键点击 `cloudfunctions/` 下的各个文件夹，选择 **“上传并部署（所有文件）”** 或 **“上传并部署（云端安装依赖）”**。
 
-## 部署步骤
+### 核心云函数概览
+- **`aiGenerate`**: 替代客户端直接发起 API 请求，代理访问各大平台的 AI 生图接口。
+- **`featureConfig`**: 提供小程序前端读取可用功能列表（首页瀑布流数据源）。
+- **`modelConfig`**: 管理模型配置信息。
+- **`points`**: 处理积分扣减与查询，内置并发控制防刷处理。
+- **`login`**: 获取微信用户的 `openid`。
+- **`createPayment` / `paymentNotify`**: 微信支付接入。
 
-### 1. 上传云函数
-需要上传以下云函数到微信云开发控制台：
+## 2. 数据库集合 (Collections)
+请在云开发控制台 - **数据库** 中，手动创建以下集合：
 
-#### login 云函数
-- 路径: `cloudfunctions/login/`
-- 功能: 获取用户openid
-- 依赖: wx-server-sdk
-
-#### cosmetics 云函数
-- 路径: `cloudfunctions/cosmetics/`
-- 功能: 化妆品数据的增删改查
-- 依赖: wx-server-sdk
-
-#### reminders 云函数
-- 路径: `cloudfunctions/reminders/`
-- 功能: 提醒设置和消息发送
-- 依赖: wx-server-sdk
-
-#### points 云函数（妆妆蛋积分）
-- 路径: `cloudfunctions/points/`
-- 功能: 读取/初始化全局积分配置、初始化用户积分、原子扣减（含并发安全）
-- 依赖: wx-server-sdk
-- 部署：右键“上传并部署（云端安装依赖）”，选择环境 `cloudbase-5gmfinom29f48930`
-
-#### cozeWorkflow 云函数（代理扣子工作流）
-
-#### admin 云函数（管理员身份鉴权）
-
-- 作用：在云端依据 `OPENID` 判断当前用户是否为管理员，不在客户端暴露管理员的 openid。
-- 入口：`cloudfunctions/admin/index.js`
-- 使用：小程序端调用 `wx.cloud.callFunction({ name: 'admin', data: { action: 'isAdmin' } })`，返回 `{ success: true, isAdmin: boolean }`。
-- 管理员 openid：已在云函数内硬编码（仅存在云端代码），当前为 `obLo_1_UleSf8eX83HwIT_GGq8mA`。如需变更，请修改云函数并重新上传部署。
-
-部署步骤（微信开发者工具）：
-- 打开“云开发”面板，选择环境。
-- 在“云函数”列表中选择 `admin`，点击“上传并部署（所有文件）”。
-- 部署成功后，重启/预览小程序即可生效。
-- 路径: `cloudfunctions/cozeWorkflow/`
-- 功能: 从 `app_config/secrets` 读取 `coze_api_key` 与 `workflow_ids` 映射，代替前端请求调用 Coze 工作流接口，统一超时与错误处理
-- 依赖: wx-server-sdk, axios
-- 部署：右键“上传并部署（云端安装依赖）”，选择环境 `cloudbase-5gmfinom29f48930`
-- 返回值：直接返回 Coze 后端的 `data` 对象（其中包含 `data: "{...json...}"`），前端用 `parseWorkflowResponse` 解析即可
-
-#### scheduledReminder 云函数
-- 路径: `cloudfunctions/scheduledReminder/`
-- 功能: 定时触发提醒任务
-- 依赖: wx-server-sdk
-- 定时器: 每天上午9点执行 (0 0 9 * * * *)
-
-### 2. 创建数据库集合
-在云开发控制台创建以下集合：
-
-#### app_config 集合（密钥与工作流映射）
-存储调用Coze所需的密钥与工作流别名映射，仅管理员可读写：
+### 2.1. `ai_features`（生图功能表）
+驱动首页瀑布流卡片和功能详情页的配置数据。
+**权限要求**：所有用户可读，仅创建者/管理员可写。
+示例数据结构：
 ```json
 {
-  "_id": "secrets",
-  "coze_api_key": "pat_xxx",
-  "updated_at": 1730890000000,
-  "workflow_ids": {
-    "analyze": "7564249346457485338",
-    "generate_reference": "7566202567706771499"
-  },
-  "coze_base_url": "https://api.coze.cn/v1/workflow/run"
-}
-```
-> 权限：集合与该文档设置为“仅管理员可读写”，前端不得直接读取。
-
-#### cosmetics 集合
-存储化妆品信息：
-```json
-{
-  "_id": "自动生成",
-  "_openid": "用户openid",
-  "name": "化妆品名称",
-  "category": "分类",
-  "purchaseDate": "开封日期",
-  "expiryDate": "过期日期",
-  "remarks": "备注",
-  "imageUrl": "图片URL",
-  "createTime": "创建时间",
-  "updateTime": "更新时间"
+  "name": "元气日系写真",        // 功能名称，展示在卡片和页面标题上
+  "group": "写真",             // 功能分组，用于在首页进行分类筛选
+  "home_banner": "cloud://...", // 首页瀑布流卡片展示图（云存储地址）
+  "detail_banner": "cloud://...", // 功能详情页顶部横幅展示图（云存储地址）
+  "upload_count": 1,           // 用户需要上传的参考图数量限制（单图为 1，多图为对应数值）
+  "points_cost": 5,            // 每次生成需要消耗的积分额度
+  "model_call_id": "coze_workflow_12345", // 关联模型配置表中的 model_call_id
+  "prompt": "将上传的人像转换成元气日系风格，光线明亮...", // 传递给大模型或工作流的绘图提示词
+  "status": 1,                 // 上下架状态（1 为正常上架展示，0 为下架隐藏）
+  "sort": 10                   // 首页排序权重（数值越小排序越靠前）
 }
 ```
 
-#### reminders 集合
-存储提醒设置：
+### 2.2. `ai_models`（模型配置表）
+存放调用的模型服务商及其密钥信息（安全起见，绝对不要将密钥放在前端）。
+**权限要求**：仅管理员可读写。
+示例数据结构：
 ```json
 {
-  "_id": "自动生成",
-  "_openid": "用户openid",
-  "cosmeticId": "化妆品ID",
-  "cosmeticName": "化妆品名称",
-  "templateId": "模板消息ID",
-  "reminderDate": "提醒日期",
-  "expiryDate": "过期日期",
-  "isActive": "是否激活",
-  "createTime": "创建时间",
-  "sentTime": "发送时间"
+  "model_call_id": "coze_workflow_12345", // 与生图功能表关联的唯一标识 ID
+  "provider": "coze",          // 模型接口服务商（支持 'coze' / 'volcengine' / 'supersolo' / 'supersolo_async' / 'toapis' / 'mock'）
+  "base_url": "https://api.coze.cn/v1/workflow/run", // 模型 API 接口基础请求地址
+  "model_id": "7564249346457485338", // 大模型的工作流 ID、部署的模型 ID 或具体推理名称
+  "api_key": "pat_xxxxxx"      // 服务商提供的身份授权密钥 (API Key / Personal Access Token)
 }
 ```
 
-#### points_config 集合（妆妆蛋配置）
-存储全局运营配置（仅一条，`_id: "global"`）：
+`supersolo_async`（CLIProxyAPI/Supersolo 异步生图）接入示例：
+```json
+{
+  "model_call_id": "supersolo_gpt_image_2_async",
+  "provider": "supersolo_async",
+  "base_url": "https://your-supersolo-domain.com/v1",
+  "model_id": "gpt-image-2",
+  "api_key": "your-supersolo-api-key"
+}
+```
+
+`toapis`（OpenAI 兼容网关）接入示例：
+```json
+{
+  "model_call_id": "toapis_gpt_image_2",
+  "provider": "toapis",
+  "base_url": "https://toapis.com/v1",
+  "model_id": "gpt-image-2",
+  "api_key": "your-toapis-key"
+}
+```
+
+### 2.3. `user_points`（用户积分表）
+记录用户的积分余额。文档 `_id` 需与用户 `openid` 保持一致。
+**权限要求**：所有用户可读，仅创建者可写。
+示例数据结构：
+```json
+{
+  "_id": "oAbCdeFgHiJkLmNoP",
+  "points": 100,
+  "updated_at": 1730890000000
+}
+```
+
+### 2.4. `points_config`（全局积分配置表）
+仅包含一条记录，`_id` 固定为 `global`，用于设置用户初次进入赠送的积分等。
+**权限要求**：所有用户可读，仅管理员可写。
 ```json
 {
   "_id": "global",
-  "name": "妆妆蛋",
-  "initial_points": 100,
-  "analyze_cost": 3,
-  "generate_cost": 5,
-  "updated_at": 0
+  "initial_points": 50,
+  "updated_at": 1730890000000
 }
 ```
 
-#### user_points 集合（用户积分）
-用户积分以 openid 作为文档ID：
+### 2.5. `generation_history`（生成记录表）
+存储用户生成的历史图片记录。
+**权限要求**：所有用户可读，仅创建者可读写。
+
+### 2.6. `generation_tasks`（异步生图任务表）
+用于解耦“提交任务”和“执行生图”，避免云函数 60 秒超时。
+**权限要求**：仅云函数可读写（建议设置为“仅管理端可读写”或“仅创建者可读写”，客户端通过 `aiGenerate` 查询）。
+
+字段说明：
 ```json
 {
-  "_id": "<用户OPENID>",
-  "points": 100,
-  "updated_at": 0
+  "_openid": "oAbCdeFgHiJkLmNoP",
+  "featureId": "feature_doc_id",
+  "status": "pending",
+  "imageUrls": ["cloud://..."],
+  "promptSnapshot": "将上传的人像转换成...",
+  "modelCallIdSnapshot": "supersolo_gpt_image_2",
+  "featureNameSnapshot": "元气日系写真",
+  "pointsCost": 5,
+  "pointsDeducted": true,
+  "pointsRefunded": false,
+  "resultUrl": "",
+  "errorMessage": "",
+  "historyId": "",
+  "createdAt": "serverDate",
+  "startedAt": null,
+  "finishedAt": null
 }
 ```
 
-> 注意：首次运行时，`points` 云函数的 `ensureUserPoints` 会自动创建用户的积分文档并返回最新积分。若未部署 `points` 云函数，将出现 `FUNCTION NOT FOUND` 错误。
+`status` 取值：
+- `pending`：已创建，等待 worker 执行
+- `running`：worker 已抢占任务，正在调用模型
+- `succeeded`：生成成功，可读取 `resultUrl`
+- `failed`：生成失败，可读取 `errorMessage`
 
-### 3. 配置权限
-确保云函数具有以下权限：
-- 数据库读写权限
-- 订阅消息发送权限
-- 定时触发器权限
+建议索引（在云开发控制台 - 数据库 - 索引 中创建）：
+1. `_openid` 升序 + `createdAt` 降序
+2. `status` 升序 + `createdAt` 降序
 
-### 4. 测试功能
-部署完成后测试以下功能：
-- 用户登录授权
-- 化妆品数据增删改查
-- 订阅消息授权
-- 提醒设置
-- 定时任务执行
-- 妆容分析与参考图生成（别名：`analyze`、`generate_reference`）
+## 3. 异步生图云函数
 
-## 功能特性
+除原有 `aiGenerate` 外，还需部署新的 `generationWorker` 云函数：
 
-### 用户认证
-- 使用微信云开发用户认证体系
-- 自动获取用户openid
-- 数据按用户隔离
+- **`aiGenerate`**
+  - `action: "createTask"`：扣积分、写入 `generation_tasks`、触发 worker，秒级返回 `taskId`
+  - `action: "getTaskStatus"`：按 `taskId + openid` 查询任务状态
+  - 无 `action` 时保留旧同步入口（兼容）
+- **`generationWorker`**
+  - 接收 `taskId`，CAS 抢占 `pending -> running`
+  - 调用模型、写入 `generation_history`、更新任务状态
+  - 失败时幂等回滚积分
 
-### 数据存储
-- 云数据库存储化妆品信息
-- 支持图片上传和存储
-- 数据实时同步
+**重要**：微信小程序云开发的云函数单次执行上限为 **60 秒**，`generationWorker` 也不能超过该上限。请在实现中保持短执行（例如请求超时控制在 50 秒内），超时后写入失败状态并回滚积分。
 
-### 定时提醒
-- 用户可设置过期提醒
-- 自动在过期前7天发送提醒
-- 使用微信订阅消息推送
-- 每天上午9点检查并发送提醒
-
-### 订阅消息
-- 模板ID: `Bt7Mmwj4cz-klq4dBnp1EZ_L9ovLeZykyk5atwzcjgY`
-- 支持一次性订阅
-- 自动发送过期提醒
-
-## 注意事项
-1. 确保小程序已开通云开发服务
-2. 订阅消息模板需要在微信公众平台配置
-3. 定时触发器需要在云开发控制台启用
-4. 测试时注意云函数调用次数限制
-5. 生产环境建议配置独立的云开发环境
+## 4. 安全注意事项
+- **密钥安全**：绝对不要在 `pages/` 客户端代码中硬编码任何第三方大模型的 API Key 或敏感信息。
+- **权限隔离**：`ai_models` 集合建议仅允许管理员读写，或完全隔离仅由后端云函数（`aiGenerate` 等）去读取，严防客户端越权访问导致资产损失。

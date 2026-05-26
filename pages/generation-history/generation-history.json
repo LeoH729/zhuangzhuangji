@@ -1,4 +1,6 @@
 {
-    "navigationBarTitleText": "生成记录",
-    "navigationBarBackgroundColor": "#FFF6F7"
+  "navigationBarTitleText": "任务列表",
+  "navigationBarBackgroundColor": "#F5F5F7",
+  "enablePullDownRefresh": true,
+  "usingComponents": {}
 }

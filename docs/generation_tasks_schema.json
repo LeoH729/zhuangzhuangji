@@ -1,0 +1,39 @@
+{
+  "collection": "generation_tasks",
+  "permissions": "仅管理端可读写，客户端通过 aiGenerate 云函数访问",
+  "indexes": [
+    {
+      "name": "openid_createdAt",
+      "fields": [
+        { "field": "_openid", "order": "asc" },
+        { "field": "createdAt", "order": "desc" }
+      ]
+    },
+    {
+      "name": "status_createdAt",
+      "fields": [
+        { "field": "status", "order": "asc" },
+        { "field": "createdAt", "order": "desc" }
+      ]
+    }
+  ],
+  "exampleDocument": {
+    "_openid": "oAbCdeFgHiJkLmNoP",
+    "featureId": "feature_doc_id",
+    "status": "pending",
+    "imageUrls": ["cloud://env-id/uploads/example.jpg"],
+    "promptSnapshot": "将上传的人像转换成元气日系风格",
+    "modelCallIdSnapshot": "supersolo_gpt_image_2",
+    "featureNameSnapshot": "元气日系写真",
+    "pointsCost": 5,
+    "pointsDeducted": true,
+    "pointsRefunded": false,
+    "resultUrl": "",
+    "errorMessage": "",
+    "historyId": "",
+    "createdAt": "2026-05-20T08:00:00.000Z",
+    "startedAt": null,
+    "finishedAt": null
+  },
+  "statusValues": ["pending", "running", "succeeded", "failed"]
+}

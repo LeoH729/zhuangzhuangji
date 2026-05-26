@@ -1,18 +1,16 @@
-<view class="container {{playing ? 'play' : 'paused'}}">
-  <!-- 核心扫描预览区 -->
-  <view class="scan-container">
-    <image class="user-preview" src="{{imageUrl}}" mode="aspectFill"></image>
-    <view class="scan-bar"></view>
-    <view class="scan-mask"></view>
-  </view>
-  
-  <text class="tip-text">正在为您定制专属妆容...</text>
-
-  <view class="carousel">
-    <text class="line l1">{{allLines[0]}}</text>
-    <text class="line l2">{{allLines[1]}}</text>
-    <text class="line l3">{{allLines[2]}}</text>
-    <text class="line l4">{{allLines[3]}}</text>
-    <text class="line l5">{{allLines[4]}}</text>
+<view class="container full-page">
+  <view class="generating-box">
+    <view class="elegant-spinner"></view>
+    <view class="loading-title">AI 正在绘制</view>
+    <view class="loading-subtitle">{{statusText || '魔法正在发生，预计需要几十秒'}}</view>
+    <view class="progress-bar">
+      <view class="progress-inner" style="width: {{progress}}%"></view>
+    </view>
+    
+    <!-- 提示与返回首页按钮 -->
+    <view class="bottom-actions">
+      <text class="hint-text">受不同大模型影响，生成时间可能需要1-5分钟</text>
+      <button class="btn-outline" bindtap="goHome" hover-class="btn-hover">去逛逛其他</button>
+    </view>
   </view>
 </view>

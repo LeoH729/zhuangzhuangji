@@ -1,133 +1,170 @@
-/* pages/result/result.wxss */
-button {
-  background: transparent;
-  padding: 0;
-  margin: 0;
-  line-height: inherit;
-  border-radius: 0;
-}
-button::after { border: none; }
-
 .container {
-  width: 100vw;
-  height: 100vh;
-  background-color: #1a1a1a; /* 沉浸深色背景 */
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  background: var(--color-bg);
 }
-
-/* 核心对比区 */
-.compare-container {
+.result-box-container {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding-bottom: 30rpx;
+}
+.result-box {
   width: 100%;
-  position: relative;
-  overflow: hidden;
-  background: #000;
-}
-
-/* 图片图层 - 绝对定位重叠 */
-.image-layer {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
-  overflow: hidden; /* 关键：裁剪内容 */
-}
-
-.original-layer {
-  width: 100%; /* 底层原图始终显示全宽，但被上层遮挡 */
-  z-index: 1;
-}
-
-.result-layer {
-  z-index: 2;
-  border-right: 2rpx solid rgba(255,255,255,0.8); /* 分割线高亮 */
-  /* width 由 inline style 动态控制 */
-}
-
-/* 图片本身 */
-.comp-img {
-  width: 100vw; /* 关键：图片必须设为视口宽度，而不是 100% (否则裁剪时会变形) */
-  height: 100%;
-}
-
-/* 标签 */
-.layer-tag {
-  position: absolute;
-  top: 40rpx;
-  padding: 8rpx 24rpx;
-  background: rgba(0,0,0,0.5);
-  color: #fff;
-  font-size: 24rpx;
-  border-radius: 30rpx;
-  backdrop-filter: blur(4px);
-  z-index: 10;
-  white-space: nowrap; /* 防止挤压换行 */
-  transition: opacity 0.2s ease; /* 增加淡入淡出效果 */
-}
-.layer-tag.left { left: 40rpx; }
-.layer-tag.right { left: 40rpx; background: rgba(255,112,132,0.6); }
-
-/* 滑块手柄 */
-.slider-handle-line {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 0;
-  z-index: 20;
-  /* left 由 inline style 控制 */
-}
-
-.slider-arrow {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 64rpx;
-  height: 64rpx;
-  background: #fff;
-  border-radius: 50%;
-  box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.3);
+  box-sizing: border-box;
+  padding: 40rpx 40rpx 20rpx 40rpx;
   display: flex;
   justify-content: center;
   align-items: center;
 }
-.slider-arrow image {
-  width: 32rpx;
-  height: 32rpx;
+.result-image {
+  width: 100%;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  background: var(--color-secondary);
 }
-/* 如果没有 icon，用 CSS 伪元素画个箭头 */
-.slider-arrow::before, .slider-arrow::after {
-  content: '';
-  display: block;
-  width: 0;
-  height: 0;
-  border-top: 8rpx solid transparent;
-  border-bottom: 8rpx solid transparent;
-  position: absolute;
-}
-.slider-arrow::before {
-  border-right: 10rpx solid #333;
-  left: 12rpx;
-}
-.slider-arrow::after {
-  border-left: 10rpx solid #333;
-  right: 12rpx;
-}
-
-/* 底部操作栏 */
-.footer-actions {
-  height: 180rpx;
-  background: #1a1a1a;
+.result-image-fallback {
+  min-height: 720rpx;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 40rpx;
-  padding-bottom: constant(safe-area-inset-bottom);
-  padding-bottom: env(safe-area-inset-bottom);
-  box-shadow: 0 -4rpx 20rpx rgba(0,0,0,0.3);
-  z-index: 30;
+  justify-content: center;
+  color: var(--color-text-sub);
+  font-size: 28rpx;
+}
+.action-box {
+  padding: 40rpx 40rpx calc(40rpx + env(safe-area-inset-bottom));
+  background: var(--color-card-bg);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  box-shadow: 0 -4rpx 20rpx rgba(0,0,0,0.03);
+  display: flex;
+  flex-direction: row;
+  gap: 20rpx;
 }
 
-/* .action-btn 等已替换为全局按钮样式 */
+.result-action-btn {
+  flex: 1;
+  height: 88rpx;
+  line-height: 88rpx;
+  border-radius: 44rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  margin: 0;
+  padding: 0 16rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.result-action-btn::after {
+  border: none;
+}
+
+.result-action-primary {
+  background: #111111;
+  color: #ffffff;
+  border: 2rpx solid #111111;
+}
+
+.result-action-secondary {
+  background: #ffffff;
+  color: #111111;
+  border: 2rpx solid #111111;
+}
+
+.poster-canvas {
+  position: fixed;
+  left: -9999px;
+  top: -9999px;
+  width: 750px;
+  height: 940px;
+}
+
+/* =========================================================================
+ * 评价模块 — 极简优雅风格
+ * ========================================================================= */
+.rating-section {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20rpx 40rpx 0;
+  box-sizing: border-box;
+}
+
+.rating-hint {
+  font-size: 24rpx;
+  color: var(--color-text-sub);
+  letter-spacing: 1rpx;
+  margin-bottom: 24rpx;
+}
+
+.rating-actions {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  gap: 32rpx;
+}
+
+/* 胶囊按钮 */
+.rate-pill {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8rpx;
+  padding: 16rpx 40rpx;
+  border-radius: 60rpx;
+  background: var(--color-card-bg);
+  border: 2rpx solid var(--color-border);
+  transition: all 0.25s ease;
+}
+
+.rate-pill:active {
+  transform: scale(0.95);
+  background: var(--color-secondary);
+}
+
+.rate-emoji {
+  font-size: 32rpx;
+  line-height: 1;
+}
+
+.rate-label {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--color-text-main);
+  line-height: 1.2;
+}
+
+/* ---- 选中态 ---- */
+.rate-pill.selected {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.rate-pill.selected .rate-label {
+  color: #FFFFFF;
+}
+
+/* ---- 未选中项淡出 ---- */
+.rate-pill.faded {
+  opacity: 0.3;
+  border-color: var(--color-border);
+  background: var(--color-secondary);
+}
+
+.rate-pill.faded .rate-label {
+  color: var(--color-text-sub);
+}
+
+/* ---- 锁定态（已评价后禁止再点） ---- */
+.rate-pill.locked {
+  pointer-events: none;
+}
+
+.rate-pill.locked:active {
+  transform: none;
+}

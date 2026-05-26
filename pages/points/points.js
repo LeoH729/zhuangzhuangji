@@ -1,7 +1,8 @@
 // pages/points/points.js
-const WxPaymentSDK = require('../../wxPaymentSDK/index.js');
+const WxVirtualPaymentSDK = require('../../wxPaymentSDK/virtualPayment.js');
 Page({
     data: {
+        generationNotice: { visible: false, taskId: '', message: '' },
         points: 0,
         rechargeOptions: [
             { id: 1, amount: 10, price: 1, label: '萌新', tag: '' },
@@ -19,18 +20,49 @@ Page({
     onLoad(options) {
         this.updatePoints();
         this.loadHistory();
+        this.reconcilePendingOrders(); // 启动未核销订单扫描与发货补偿
     },
 
     onShow() {
+        const app = getApp();
+        app.syncGenerationNoticeToPage(this);
         // 每次返回页面刷新数据
         this.updatePoints();
         this.loadHistory();
+        this.reconcilePendingOrders(); // 启动未核销订单扫描与发货补偿
     },
 
-    updatePoints() {
+    updateGenerationNotice(notice) {
+        this.setData({ generationNotice: notice || { visible: false, taskId: '', message: '' } });
+    },
+
+    onGenerationNoticeTap() {
         const app = getApp();
-        const pts = (app.globalData && typeof app.globalData.userPoints === 'number') ? app.globalData.userPoints : 0;
-        this.setData({ points: pts });
+        app.goToGenerationHistoryFromNotice();
+    },
+
+    async updatePoints() {
+        try {
+            const res = await wx.cloud.callFunction({
+                name: 'points',
+                data: { action: 'getUserPoints' }
+            });
+
+            if (res.result && res.result.success && res.result.data) {
+                const pts = res.result.data.points || 0;
+                const app = getApp();
+                app.globalData.userPoints = pts;
+                wx.setStorageSync('userPoints', pts);
+                this.setData({ points: pts });
+                return;
+            }
+        } catch (e) {
+            console.error('[Points] 刷新余额失败:', e);
+        }
+
+        const app = getApp();
+        const fallbackPoints = (app.globalData && typeof app.globalData.userPoints === 'number') ? app.globalData.userPoints : 0;
+        this.setData({ points: fallbackPoints });
     },
 
     selectOption(e) {
@@ -42,7 +74,7 @@ Page({
 
     // ... (existing code)
 
-    // 充值（接入微信支付）
+    // 充值（接入微信虚拟支付合规流程）
     async onRecharge() {
         if (this.data.isRecharging) return;
 
@@ -52,39 +84,38 @@ Page({
         this.setData({ isRecharging: true });
 
         try {
-            // 1. 准备用户信息（支付SDK需要，若无则使用默认值）
-            const app = getApp();
-            let userInfo = app.globalData.userInfo;
-            if (!userInfo || !userInfo.nickName) {
-                // 尝试从本地缓存获取
-                userInfo = wx.getStorageSync('userInfo') || {};
-                if (!userInfo.nickName) {
-                    // 使用默认值，避免支付流程受阻（支付本身不依赖昵称，仅SDK校验用）
-                    userInfo = { nickName: '微信用户', avatarUrl: '', ...userInfo };
-                }
-            }
+            // 定义套餐 ID 对应的微信后台虚拟道具 ID
+            const productIdMap = {
+                1: 'points_1',
+                2: 'points_6',
+                3: 'points_18',
+                4: 'points_38',
+                5: 'points_58',
+                6: 'points_88'
+            };
 
-            // 2. 准备支付参数
-            // 注意：微信支付金额单位为“分”
             const paymentOptions = {
-                amount: option.price * 100, // 元转分
-                description: `妆妆蛋充值-${option.label}套餐`,
+                productId: productIdMap[option.id],
+                goodsPrice: option.price * 100, // 元转分
+                description: `星光充值-${option.label}套餐`,
                 attach: JSON.stringify({
                     type: 'recharge',
-                    eggAmount: option.amount, // 充值的蛋数量
+                    eggAmount: option.amount, // 充值的星光数量 (维持字段名为eggAmount保持向后兼容)
                     optionId: option.id,
                     label: option.label
                 })
             };
 
-            // 3. 发起支付
-            const result = await WxPaymentSDK.processPayment(userInfo, paymentOptions);
+            console.log('[Points] 开始调起虚拟支付，参数:', paymentOptions);
+
+            // 发起虚拟支付
+            const result = await WxVirtualPaymentSDK.processPayment(paymentOptions);
 
             if (result.success) {
-                wx.showToast({ title: '支付成功', icon: 'success' });
-
-                // 4. 轮询查余额（因为支付回调是异步的，可能有一点延迟）
-                this.pollBalanceUpdate(app.globalData.userPoints);
+                wx.showToast({ title: '支付处理中...', icon: 'loading' });
+                // 启动主动对账轮询与余额刷新（主动触发后端查单核销，确保 100% 极速到账）
+                const app = getApp();
+                this.pollBalanceWithOrderCheck(result.orderNo, app.globalData.userPoints || 0);
             } else if (result.cancelled) {
                 wx.showToast({ title: '支付已取消', icon: 'none' });
             } else {
@@ -94,41 +125,72 @@ Page({
                 });
             }
         } catch (e) {
-            console.error('[Points] 充值异常:', e);
-            wx.showToast({ title: '支付发起失败', icon: 'none' });
+            console.error('[Points] 虚拟支付调起异常:', e);
+            wx.showToast({ title: '支付调起失败', icon: 'none' });
         } finally {
             this.setData({ isRecharging: false });
         }
     },
 
-    // 轮询更新余额（最多尝试 5 次，每次间隔 1 秒）
-    async pollBalanceUpdate(oldPoints, attempt = 1) {
-        if (attempt > 5) return; // 超时放弃主动刷新，这期间用户也可以手动刷新
+    // 主动对账轮询与余额更新（最多尝试 6 次，每次间隔 1.5 秒）
+    async pollBalanceWithOrderCheck(orderNo, oldPoints, attempt = 1) {
+        if (attempt > 6) {
+            wx.hideLoading();
+            return; // 轮询结束，若因微信网络延迟未到账，后续也会通过微信异步发货，用户也可手动刷新页面
+        }
 
         try {
-            const res = await wx.cloud.callFunction({
+            console.log(`[Points] 第 ${attempt} 次主动发起查单对账:`, orderNo);
+            
+            // 1. 主动触发服务端的查单对账逻辑，对账成功时后端会直接核销并发货
+            const queryRes = await wx.cloud.callFunction({
+                name: 'virtualPayment',
+                data: {
+                    action: 'queryOrder',
+                    orderNo: orderNo
+                }
+            });
+
+            // 诊断与除错：如果返回明确的支付失败（如签名/商户配置等错误），弹出详细弹窗，避免静默掩盖
+            if (queryRes.result && !queryRes.result.success) {
+                console.error('[Points] 对账服务返回错误:', queryRes.result);
+                wx.showModal({
+                    title: '充值同步状态提示',
+                    content: queryRes.result.message || '微信支付查单失败，请重试',
+                    showCancel: false
+                });
+                return;
+            }
+
+            const isPaid = queryRes.result && queryRes.result.success && queryRes.result.status === 'PAID';
+
+            // 2. 主动拉取用户最新的积分余额
+            const ptsRes = await wx.cloud.callFunction({
                 name: 'points',
                 data: { action: 'getUserPoints' }
             });
 
-            if (res.result && res.result.success) {
-                const newPoints = res.result.data.points;
-                // 如果积分变动了，说明回调已处理
-                if (newPoints !== oldPoints) {
+            if (ptsRes.result && ptsRes.result.success) {
+                const newPoints = ptsRes.result.data.points;
+                // 如果积分变动了，或者后端查单确认成功，则刷新页面显示
+                if (newPoints !== oldPoints || isPaid) {
                     const app = getApp();
                     app.globalData.userPoints = newPoints;
                     wx.setStorageSync('userPoints', newPoints);
                     this.setData({ points: newPoints });
-                    this.loadHistory(); // 刷新明细
+                    this.loadHistory(); // 刷新收支明细
+                    wx.showToast({ title: '充值成功', icon: 'success', duration: 3000 });
                     return;
                 }
             }
-        } catch (e) { console.error('查询余额失败', e); }
+        } catch (e) { 
+            console.error('[Points] 轮询对账查单异常:', e); 
+        }
 
-        // 未更新，等待后重试
+        // 未核销，等待 1.5 秒后重试
         setTimeout(() => {
-            this.pollBalanceUpdate(oldPoints, attempt + 1);
-        }, 1000);
+            this.pollBalanceWithOrderCheck(orderNo, oldPoints, attempt + 1);
+        }, 1500);
     },
 
     // 加载真实收支明细
@@ -144,6 +206,53 @@ Page({
             }
         } catch (e) {
             console.error('[Points] 加载明细失败:', e);
+        }
+    },
+
+    // 自动扫描并核销未完成的订单（发货补偿与防漏单机制）
+    async reconcilePendingOrders() {
+        try {
+            console.log('[Points] 启动未完成订单扫描...');
+            const db = wx.cloud.database();
+            // 查询当前用户 3 天内创建且状态仍为 CREATED 的虚拟支付订单
+            const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+            const res = await db.collection('orders').where({
+                status: 'CREATED',
+                pay_type: 'VIRTUAL_PAYMENT',
+                created_at: db.command.gte(threeDaysAgo)
+            }).limit(5).get();
+
+            if (res.data && res.data.length > 0) {
+                console.log(`[Points] 发现 ${res.data.length} 笔未核销订单，启动后台补发流程...`);
+                let hasReconciled = false;
+
+                for (const order of res.data) {
+                    console.log('[Points] 正在核销订单:', order.orderNo);
+                    const queryRes = await wx.cloud.callFunction({
+                        name: 'virtualPayment',
+                        data: {
+                            action: 'queryOrder',
+                            orderNo: order.orderNo
+                        }
+                    });
+
+                    if (queryRes.result && queryRes.result.success && queryRes.result.status === 'PAID') {
+                        console.log(`[Points] 订单 ${order.orderNo} 补发发货成功！`);
+                        hasReconciled = true;
+                    }
+                }
+
+                if (hasReconciled) {
+                    // 只要有任意一笔补发成功，刷新余额和明细
+                    this.updatePoints();
+                    this.loadHistory();
+                    wx.showToast({ title: '已自动同步充值记录', icon: 'success', duration: 3000 });
+                }
+            } else {
+                console.log('[Points] 无待核销订单');
+            }
+        } catch (e) {
+            console.error('[Points] 扫描未完成订单异常:', e);
         }
     }
 })

@@ -1,86 +1,132 @@
-// pages/profile/profile.js
+const app = getApp()
+
 Page({
-    /**
-     * 页面的初始数据
-     */
-    data: {
-        avatarUrl: '/images/default_avatar.png', // 暂时使用默认头像占位
-        nickName: '妆妆记用户',
-        points: 0,
-        isAdmin: false
-    },
+  data: {
+    generationNotice: { visible: false, taskId: '', message: '' },
+    userInfo: {},
+    hasUserInfo: false,
+    points: 0,
+    registerDate: '',
+    avatarLoaded: false
+  },
 
-    /**
-     * 生命周期函数--监听页面加载
-     */
-    onLoad(options) {
-        this.updatePoints();
-    },
+  onShow() {
+    app.syncGenerationNoticeToPage(this)
+    this.checkLoginStatus()
+  },
 
-    /**
-     * 生命周期函数--监听页面显示
-     */
-    onShow() {
-        this.updatePoints();
-        this.checkAdminStatus();
-    },
+  updateGenerationNotice(notice) {
+    this.setData({ generationNotice: notice || { visible: false, taskId: '', message: '' } })
+  },
 
-    updatePoints() {
-        const app = getApp();
-        const pts = (app.globalData && typeof app.globalData.userPoints === 'number') ? app.globalData.userPoints : 0;
-        this.setData({ points: pts });
-    },
+  onGenerationNoticeTap() {
+    app.goToGenerationHistoryFromNotice()
+  },
 
-    checkAdminStatus() {
-        const app = getApp();
-        const isAdminGlobal = app.globalData && app.globalData.isAdmin;
-        const isAdminStored = wx.getStorageSync('isAdmin');
+  onAvatarLoad() {
+    this.setData({ avatarLoaded: true })
+  },
 
-        // 优先使用全局变量，其次使用本地存储
-        const isAdmin = !!(isAdminGlobal || isAdminStored);
+  onAvatarError() {
+    this.setData({ avatarLoaded: true })
+  },
 
-        if (isAdmin !== this.data.isAdmin) {
-            this.setData({ isAdmin });
-        }
-
-        // 再次确认（处理异步延迟）
-        if (!isAdmin) {
-            setTimeout(() => {
-                const appLater = getApp();
-                const isAdminLater = (appLater.globalData && appLater.globalData.isAdmin) || wx.getStorageSync('isAdmin');
-                if (isAdminLater && isAdminLater !== this.data.isAdmin) {
-                    this.setData({ isAdmin: isAdminLater });
-                }
-            }, 1000);
-        }
-    },
-
-    // 菜单跳转处理
-    navigateTo(e) {
-        const url = e.currentTarget.dataset.url;
-        console.log('Navigating to:', url);
-        if (url) {
-            wx.navigateTo({
-                url,
-                fail: (err) => {
-                    console.error('Navigation failed:', err);
-                    wx.showToast({ title: '页面跳转失败', icon: 'none' });
-                }
-            });
-        }
-    },
-
-    goAdminPage() {
-        wx.navigateTo({
-            url: '/pages/admin/admin'
-        });
-    },
-
-    onShowAbout() {
-        wx.showModal({
-            title: '关于我们',
-            content: '妆妆记 V1.2.0\r\n联系开发者\r\n419126495@qq.com',
-            showCancel: false
-        });
+  checkLoginStatus() {
+    let userInfo = wx.getStorageSync('userInfo')
+    
+    // 如果没有完整的 userInfo，可以尝试从 app.globalData 获取或者直接补全
+    if (!userInfo || !userInfo.nickName) {
+      const app = getApp();
+      if (app.globalData.userInfo && app.globalData.userInfo.nickName) {
+        userInfo = app.globalData.userInfo;
+      }
     }
+
+    if (userInfo && userInfo.nickName) {
+      const d = new Date(userInfo.loginTime || Date.now());
+      const registerDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      
+      const avatarUrlChanged = this.data.userInfo.avatarUrl !== userInfo.avatarUrl;
+      const shouldResetAvatar = !this.data.hasUserInfo || avatarUrlChanged;
+
+      this.setData({
+        userInfo,
+        hasUserInfo: true,
+        registerDate,
+        ...(shouldResetAvatar ? { avatarLoaded: false } : {})
+      })
+      this.fetchPoints()
+    }
+  },
+
+  getUserProfile() {
+    // 微信已经废弃了 wx.getUserProfile 返回真实头像昵称。
+    // 我们直接使用系统生成的随机名和默认头像进行静默注册。
+    let userInfo = wx.getStorageSync('userInfo') || {};
+    if (!userInfo.nickName) {
+      const adjectives = ['沉默的', '快乐的', '忧郁的', '机智的', '勇敢的', '迷茫的', '温柔的', '暴躁的', '内向的', '开朗的', '神秘的', '调皮的', '冷静的', '热情的', '慵懒的', '勤奋的', '傲娇的', '佛系的', '认真的', '随性的', '元气的', '呆萌的', '文艺的', '硬核的'];
+      const nouns = ['矿泉水', '打字机', '键盘', '鼠标', '显示器', '耳机', '咖啡杯', '保温杯', '双肩包', '笔记本', '铅笔', '橡皮擦', '计算器', '台灯', '沙发', '抱枕', '盆栽', '仙人掌', '多肉', '橘猫', '柴犬', '修勾', '大橘', '柯基', '充电宝'];
+      const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
+      const noun = nouns[Math.floor(Math.random() * nouns.length)];
+      const suffix = Math.floor(Math.random() * 9000 + 1000);
+      
+      userInfo.nickName = `${adj}${noun}${suffix}`;
+      userInfo.avatarUrl = '/images/default_avatar.png';
+      userInfo.loginTime = new Date().getTime();
+      wx.setStorageSync('userInfo', userInfo);
+    }
+    
+    const d = new Date(userInfo.loginTime || Date.now());
+    const registerDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    
+    const avatarUrlChanged = this.data.userInfo.avatarUrl !== userInfo.avatarUrl;
+    const shouldResetAvatar = !this.data.hasUserInfo || avatarUrlChanged;
+
+    this.setData({
+      userInfo,
+      hasUserInfo: true,
+      registerDate,
+      ...(shouldResetAvatar ? { avatarLoaded: false } : {})
+    })
+    
+    wx.cloud.callFunction({
+      name: 'login',
+      data: { userInfo }
+    }).then(loginRes => {
+      if (loginRes.result && loginRes.result.points !== undefined) {
+        this.setData({ points: loginRes.result.points })
+      } else {
+        this.fetchPoints()
+      }
+    }).catch(console.error)
+  },
+
+  fetchPoints() {
+    wx.cloud.callFunction({
+      name: 'points',
+      data: { action: 'getUserPoints' }
+    }).then(res => {
+      if (res.result && res.result.success && res.result.data) {
+        const points = res.result.data.points || 0
+        app.globalData.userPoints = points
+        wx.setStorageSync('userPoints', points)
+        this.setData({ points })
+      }
+    }).catch(console.error)
+  },
+
+  goToPoints() {
+    if (!this.data.hasUserInfo) return this.getUserProfile()
+    wx.navigateTo({ url: '/pages/points/points' })
+  },
+
+  goToHistory() {
+    if (!this.data.hasUserInfo) return this.getUserProfile()
+    wx.navigateTo({ url: '/pages/generation-history/generation-history' })
+  },
+
+  goToFeedback() {
+    if (!this.data.hasUserInfo) return this.getUserProfile()
+    wx.navigateTo({ url: '/pages/feedback/feedback' })
+  }
 })

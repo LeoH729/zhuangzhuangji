@@ -1,14 +1,10 @@
 {
   "pages": [
-    "pages/makeup/makeup",
-    "pages/cosmetics/cosmetics",
-    "pages/add/add",
-    "pages/edit/edit",
+    "pages/index/index",
+    "pages/feature/feature",
+    "pages/feature-unavailable/feature-unavailable",
     "pages/result/result",
-    "pages/makeup-generating/makeup-generating",
     "pages/analyzing/analyzing",
-    "pages/reference/reference",
-    "pages/admin/admin",
     "pages/profile/profile",
     "pages/points/points",
     "pages/feedback/feedback",
@@ -16,26 +12,22 @@
     "pages/generation-history/generation-history"
   ],
   "window": {
-    "navigationBarTitleText": "妆妆记",
-    "navigationBarBackgroundColor": "#FFF6F7",
+    "enableShareAppMessage": true,
+    "enableShareTimeline": true,
+    "navigationBarTitleText": "Ai造梦",
+    "navigationBarBackgroundColor": "#FFFFFF",
     "navigationBarTextStyle": "black",
-    "backgroundColor": "#FFF6F7"
+    "backgroundColor": "#F7F8FA"
   },
   "debug": false,
   "resizable": false,
   "tabBar": {
     "list": [
       {
-        "pagePath": "pages/makeup/makeup",
-        "text": "妆容",
-        "iconPath": "images/icon_makeup.png",
-        "selectedIconPath": "images/icon_makeup_selected.png"
-      },
-      {
-        "pagePath": "pages/cosmetics/cosmetics",
-        "text": "化妆品",
-        "iconPath": "images/icon_list.png",
-        "selectedIconPath": "images/icon_list_selected.png"
+        "pagePath": "pages/index/index",
+        "text": "梦图",
+        "iconPath": "images/icon_home.png",
+        "selectedIconPath": "images/icon_home_selected.png"
       },
       {
         "pagePath": "pages/profile/profile",
@@ -44,18 +36,18 @@
         "selectedIconPath": "images/icon_profile_selected.png"
       }
     ],
-    "color": "#D0D0D0",
-    "selectedColor": "#F2909B",
+    "color": "#A0A5AF",
+    "selectedColor": "#222222",
     "backgroundColor": "#ffffff",
     "borderStyle": "white"
   },
   "lazyCodeLoading": "requiredComponents",
   "permission": {
     "scope.camera": {
-      "desc": "用于拍摄化妆品照片"
+      "desc": "用于拍摄照片以生成图片"
     },
     "scope.writePhotosAlbum": {
-      "desc": "用于保存化妆品照片"
+      "desc": "用于保存生成的图片"
     }
   }
 }

@@ -1,4 +1,5 @@
 {
-  "usingComponents": {},
-  "navigationBarTitleText": "生成中"
+  "navigationBarTitleText": "生成中",
+  "navigationBarBackgroundColor": "#F7F8FA",
+  "usingComponents": {}
 }

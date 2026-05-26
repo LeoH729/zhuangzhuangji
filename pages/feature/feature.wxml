@@ -1,0 +1,53 @@
+<view class="container pb-safe">
+  <view wx:if="{{generationNotice.visible}}" class="generation-notice" bindtap="onGenerationNoticeTap">
+    <view class="generation-notice-dot">✓</view>
+    <text class="generation-notice-text">{{generationNotice.message}}</text>
+    <text class="generation-notice-action">查看</text>
+  </view>
+
+  <view class="banner-section">
+    <image wx:if="{{!bannerImage.error}}" class="banner-image fade-in {{bannerImage.loaded ? 'visible' : 'skeleton-shimmer skeleton-bg'}}" mode="aspectFill" src="{{bannerImage.displayUrl || 'https://dummyimage.com/750x500.png/F5F5F7/AAAAAA?text=Feature+Banner'}}" bindload="onBannerLoad" binderror="onBannerError"></image>
+    <view wx:else class="banner-image banner-fallback">图片暂时无法显示</view>
+    <view class="feature-info">
+      <view class="feature-title">{{feature.name || '功能名称'}}</view>
+      <view class="feature-rating-stats">
+        <view class="rating-stat-item">
+          <text class="stat-icon">👍</text>
+          <text class="stat-count">{{feature.hang_count || 0}}</text>
+        </view>
+        <view class="rating-stat-item ml-20">
+          <text class="stat-icon">👎</text>
+          <text class="stat-count">{{feature.la_count || 0}}</text>
+        </view>
+      </view>
+      <view class="feature-cost" wx:if="{{feature.points_cost > 0}}">
+        <text class="cost-icon">✨</text>消耗 {{feature.points_cost}} 星光
+      </view>
+      <view class="feature-cost free" wx:else>限时免费</view>
+    </view>
+  </view>
+
+  <view class="upload-section">
+    <view class="section-title">上传照片</view>
+    <view class="section-desc">请上传清晰的照片以获得更好的生成效果</view>
+    
+    <view class="image-grid">
+      <view class="image-item" wx:for="{{images}}" wx:key="*this">
+        <image src="{{item}}" mode="aspectFill"></image>
+        <view class="delete-btn" catchtap="deleteImage" data-index="{{index}}">×</view>
+      </view>
+      
+      <view class="upload-btn" bindtap="chooseImage" wx:if="{{images.length < (feature.upload_count || 1)}}">
+        <view class="upload-icon">+</view>
+        <view class="upload-text">点击上传</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="bottom-action">
+    <button class="btn-primary {{images.length === 0 ? 'btn-disabled' : ''}}" bindtap="submitGenerate" hover-class="btn-hover" disabled="{{images.length === 0 || isGenerating}}">
+      {{isGenerating ? '处理中...' : '立即生成'}}
+    </button>
+    <view class="action-tips">将使用AI生图技术生成</view>
+  </view>
+</view>

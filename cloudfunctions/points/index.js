@@ -5,6 +5,14 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
 const _ = db.command
 
+// 格式化时间为 YYYY-MM-DD HH:mm:ss（北京时间）
+function formatDateTime(date = new Date()) {
+  const localTime = date.getTime() + 8 * 60 * 60 * 1000;
+  const d = new Date(localTime);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 // 集合与文档ID
 const CONFIG_COLLECTION = 'points_config'
 const CONFIG_ID = 'global'
@@ -13,23 +21,24 @@ const HISTORY_COLLECTION = 'points_history'
 
 exports.main = async (event, context) => {
   const wxContext = cloud.getWXContext()
+  const openid = wxContext.OPENID || event.openid
   const { action, amount, reason, title } = event || {}
-  console.log('[points] entry', { action, amount, reason, title, openid: wxContext.OPENID })
+  console.log('[points] entry', { action, amount, reason, title, openid })
 
   try {
     switch (action) {
       case 'getConfig':
         return await getConfig()
       case 'ensureUserPoints':
-        return await ensureUserPoints(wxContext.OPENID)
+        return await ensureUserPoints(openid)
       case 'getUserPoints':
-        return await getUserPoints(wxContext.OPENID)
+        return await getUserPoints(openid)
       case 'consume':
-        return await consumePoints(wxContext.OPENID, amount, reason, title)
+        return await consumePoints(openid, amount, reason, title)
       case 'recharge':
-        return await rechargePoints(wxContext.OPENID, amount, reason, title)
+        return await rechargePoints(openid, amount, reason, title)
       case 'getHistory':
-        return await getHistory(wxContext.OPENID, event.limit, event.skip)
+        return await getHistory(openid, event.limit, event.skip)
       default:
         return { success: false, code: 'UNKNOWN_ACTION', message: '未知操作' }
     }
@@ -61,7 +70,7 @@ async function defaultConfig() {
     styles: DEFAULT_STYLES, // 加入默认风格
     banner_image_url: '', // 默认 banner 为空
     tips_image_url: '/images/icon_tips_small.svg', // 默认 tips 图片
-    updatedAt: new Date()
+    updatedAt: formatDateTime()
   }
 }
 
@@ -112,7 +121,7 @@ async function ensureUserPoints(openid) {
   console.log('[points] ensureUserPoints start', openid)
   const cfgRes = await getConfig()
   const initPoints = (cfgRes && cfgRes.data && cfgRes.data.initial_points) || 100
-  const now = new Date()
+  const now = formatDateTime()
   try {
     const doc = await db.collection(USER_COLLECTION).doc(openid).get()
     if (doc && doc.data) {
@@ -166,7 +175,7 @@ async function addHistory(openid, type, amount, reason, title) {
 // 原子扣减用户积分（事务）+ 记录流水
 async function consumePoints(openid, amount, reason = '', title = '') {
   const cfgRes = await getConfig()
-  const now = new Date()
+  const now = formatDateTime()
   const result = await db.runTransaction(async (transaction) => {
     let doc
     try {
@@ -213,7 +222,7 @@ async function rechargePoints(openid, amount, reason = '', title = '') {
     return { success: false, code: 'BAD_AMOUNT', message: '充值数量不合法' }
   }
 
-  const now = new Date()
+  const now = formatDateTime()
 
   // 确保用户文档存在
   await ensureUserPoints(openid)
@@ -247,7 +256,12 @@ async function getHistory(openid, limit = 20, skip = 0) {
   const list = (res.data || []).map(item => {
     let timeStr = ''
     if (item.createdAt) {
-      const d = new Date(item.createdAt)
+      // 数据库存的是 UTC，云函数环境也是 UTC
+      // 手动加 8 小时转为北京时间
+      const date = new Date(item.createdAt);
+      const localTime = date.getTime() + 8 * 60 * 60 * 1000;
+      const d = new Date(localTime);
+
       const pad = n => String(n).padStart(2, '0')
       timeStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
     }

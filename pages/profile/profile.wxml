@@ -1,67 +1,51 @@
-<!--pages/profile/profile.wxml-->
-<view class="container">
-  <!-- 头部用户信息 -->
-  <view class="header-section">
-    <image class="avatar" src="{{avatarUrl}}" mode="aspectFill"></image>
-    <view class="info-box">
-      <text class="nickname">{{nickName}}</text>
-      <text class="uid">ID: --</text>
+<view class="container pb-safe">
+  <view wx:if="{{generationNotice.visible}}" class="generation-notice" bindtap="onGenerationNoticeTap">
+    <view class="generation-notice-dot">✓</view>
+    <text class="generation-notice-text">{{generationNotice.message}}</text>
+    <text class="generation-notice-action">查看</text>
+  </view>
+
+  <!-- User Info -->
+  <view class="user-header">
+    <view class="avatar-wrap">
+      <image class="avatar fade-in {{avatarLoaded ? 'visible' : 'skeleton-shimmer skeleton-bg'}}" src="{{userInfo.avatarUrl || 'https://dummyimage.com/150'}}" mode="aspectFill" bindload="onAvatarLoad" binderror="onAvatarError"></image>
+    </view>
+    <view class="user-info" wx:if="{{hasUserInfo}}">
+      <view class="nickname">{{userInfo.nickName}}</view>
+      <view class="register-date">注册于 {{registerDate}}</view>
+    </view>
+    <view class="user-info" wx:else>
+      <button class="login-btn" bindtap="getUserProfile">点击登录体验更多功能</button>
     </view>
   </view>
 
-  <!-- 资产卡片 -->
-  <view class="asset-card">
-    <view class="asset-info">
-      <text class="label">我的妆妆蛋</text>
-      <view class="value-row">
-        <image class="egg-icon" src="/images/icon_zzj_egg.svg" mode="aspectFit"></image>
-        <text class="count">{{points}}</text>
-      </view>
+  <!-- Points Card -->
+  <view class="points-card" bindtap="goToPoints">
+    <view class="pc-left">
+      <view class="pc-title">✨ 我的星光</view>
+      <view class="pc-num">{{points}}</view>
     </view>
-    <button class="recharge-btn" hover-class="btn-hover" bindtap="navigateTo" data-url="/pages/points/points">充值</button>
+    <view class="pc-right">
+      <view class="pc-btn">去充值</view>
+    </view>
   </view>
 
-  <!-- 功能菜单 -->
+  <!-- Menu List -->
   <view class="menu-list">
-    <view class="menu-item" bindtap="navigateTo" data-url="/pages/points/points">
-      <view class="item-left">
-        <image class="item-icon" src="/images/icon_points_menu.svg" mode="aspectFit"></image>
-        <text class="item-text">收支明细</text>
-      </view>
-      <image class="arrow-icon" src="/images/arrow_right.svg" mode="aspectFit"></image>
+    <view class="menu-item" bindtap="goToHistory">
+      <view class="menu-icon">📋</view>
+      <view class="menu-text">任务列表</view>
+      <view class="menu-arrow">></view>
     </view>
-
-    <view class="menu-item" bindtap="navigateTo" data-url="/pages/generation-history/generation-history">
-      <view class="item-left">
-        <image class="item-icon" src="/images/icon_history_menu.svg" mode="aspectFit"></image>
-        <text class="item-text">生成记录</text>
-      </view>
-      <image class="arrow-icon" src="/images/arrow_right.svg" mode="aspectFit"></image>
+    <view class="menu-item" bindtap="goToPoints">
+      <view class="menu-icon">💰</view>
+      <view class="menu-text">消费明细</view>
+      <view class="menu-arrow">></view>
     </view>
-
-    <view class="menu-item" bindtap="navigateTo" data-url="/pages/feedback/feedback">
-      <view class="item-left">
-        <image class="item-icon" src="/images/icon_feedback_menu.svg" mode="aspectFit"></image>
-        <text class="item-text">意见反馈</text>
-      </view>
-      <image class="arrow-icon" src="/images/arrow_right.svg" mode="aspectFit"></image>
-    </view>
-
-    <view class="menu-item" bindtap="onShowAbout">
-      <view class="item-left">
-        <image class="item-icon" src="/images/icon_about_menu.svg" mode="aspectFit"></image>
-        <text class="item-text">关于我们</text>
-      </view>
-      <text class="version-text">V1.2.0</text>
-    </view>
-
-    <!-- 管理员入口 (仅管理员可见) -->
-    <view class="menu-item" bindtap="goAdminPage" wx:if="{{isAdmin}}">
-      <view class="item-left">
-        <image class="item-icon" src="/images/icon_admin_menu.svg" mode="aspectFit"></image>
-        <text class="item-text">后台管理</text>
-      </view>
-      <image class="arrow-icon" src="/images/arrow_right.svg" mode="aspectFit"></image>
+    <view class="menu-item" bindtap="goToFeedback">
+      <view class="menu-icon">📝</view>
+      <view class="menu-text">意见反馈</view>
+      <view class="menu-arrow">></view>
     </view>
   </view>
 </view>

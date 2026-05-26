@@ -1,145 +1,118 @@
-/* pages/profile/profile.wxss */
-page {
-  background-color: #F7F8FA;
-}
-
 .container {
-  padding: 0;
-  display: flex;
-  flex-direction: column;
+  min-height: 100vh;
+  background: var(--color-bg);
 }
-
-/* 头部 */
-.header-section {
+.user-header {
   display: flex;
   align-items: center;
-  padding: 140rpx 40rpx 80rpx 40rpx; /* 顶部增加100rpx以适配自定义导航栏 */
-  background-color: #FFEAEB; /* 浅粉色背景 */
-  border-bottom-left-radius: 40rpx;
-  border-bottom-right-radius: 40rpx;
+  padding: 60rpx 40rpx;
+  background: var(--color-card-bg);
 }
-
-.avatar {
+.avatar-wrap {
   width: 120rpx;
   height: 120rpx;
   border-radius: 50%;
-  border: 4rpx solid #fff;
-  background-color: #eee;
+  overflow: hidden;
+  background: var(--color-secondary);
+  margin-right: 30rpx;
+  box-shadow: var(--shadow-sm);
 }
-
-.info-box {
-  margin-left: 30rpx;
-  display: flex;
-  flex-direction: column;
+.avatar {
+  width: 100%;
+  height: 100%;
 }
-
+.user-info {
+  flex: 1;
+}
 .nickname {
-  font-size: 36rpx;
-  font-weight: bold;
-  color: #333;
-  margin-bottom: 8rpx;
-}
-
-.uid {
-  font-size: 24rpx;
-  color: #999;
-}
-
-/* 资产卡片 */
-.asset-card {
-  margin: -60rpx 30rpx 30rpx 30rpx; /* 向上重叠 */
-  background: #fff;
-  border-radius: 20rpx;
-  padding: 30rpx 40rpx;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.05);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.asset-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.label {
-  font-size: 26rpx;
-  color: #666;
+  font-size: 40rpx;
+  font-weight: 600;
+  color: var(--color-text-main);
   margin-bottom: 12rpx;
 }
-
-.value-row {
-  display: flex;
-  align-items: center;
+.register-date {
+  font-size: 24rpx;
+  color: var(--color-text-sub);
+  margin-top: 6rpx;
 }
-
-.egg-icon {
-  width: 40rpx;
-  height: 40rpx;
-  margin-right: 12rpx;
-}
-
-.count {
-  font-size: 40rpx;
-  font-weight: bold;
-  color: #333;
-}
-
-.recharge-btn {
+.login-btn {
+  background: none;
+  padding: 0;
   margin: 0;
-  background: linear-gradient(90deg, #FF9A9E 0%, #FECFEF 100%);
-  color: #fff;
-  font-size: 28rpx;
-  padding: 12rpx 40rpx;
-  border-radius: 30rpx;
-  line-height: normal;
+  text-align: left;
+  font-size: 36rpx;
+  font-weight: 600;
+  color: var(--color-text-main);
+  line-height: 1.5;
 }
-.recharge-btn::after { border: none; }
+.login-btn::after { border: none; }
 
-/* 菜单列表 */
-.menu-list {
-  margin: 0 30rpx;
-  background: #fff;
-  border-radius: 20rpx;
-  padding: 0 30rpx;
-}
-
-.menu-item {
+.points-card {
+  margin: 30rpx 40rpx;
+  background: var(--color-primary);
+  border-radius: var(--radius-md);
+  padding: 40rpx;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 36rpx 0;
-  border-bottom: 1rpx solid #f5f5f5;
+  box-shadow: 0 10rpx 30rpx rgba(0,0,0,0.1);
+}
+.pc-title {
+  color: rgba(255,255,255,0.7);
+  font-size: 26rpx;
+  margin-bottom: 8rpx;
+}
+.pc-num {
+  color: #fff;
+  font-size: 56rpx;
+  font-weight: bold;
+}
+.pc-btn {
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+  padding: 12rpx 32rpx;
+  border-radius: 30rpx;
+  font-size: 26rpx;
+  backdrop-filter: blur(4px);
 }
 
+.menu-list {
+  background: var(--color-card-bg);
+  margin: 0 40rpx;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  padding: 36rpx 30rpx;
+  border-bottom: 1rpx solid var(--color-border);
+  background: transparent;
+  text-align: left;
+  line-height: 1.5;
+}
 .menu-item:last-child {
   border-bottom: none;
 }
-
-.item-left {
-  display: flex;
-  align-items: center;
+.menu-item:active {
+  background: var(--color-secondary);
 }
-
-.item-icon {
-  width: 40rpx;
-  height: 40rpx;
-  margin-right: 24rpx;
-  border-radius: 8rpx;
+.menu-icon {
+  font-size: 36rpx;
+  margin-right: 20rpx;
 }
-
-.item-text {
+.menu-text {
+  flex: 1;
   font-size: 30rpx;
-  color: #333;
+  color: var(--color-text-main);
 }
-
-.arrow-icon {
-  width: 32rpx;
-  height: 32rpx;
-  opacity: 0.3;
+.menu-arrow {
+  color: var(--color-text-sub);
+  font-family: monospace;
+  font-size: 28rpx;
 }
-
-.version-text {
-  font-size: 26rpx;
-  color: #ccc;
+.contact-btn {
+  border: none;
+  margin: 0;
 }
+.contact-btn::after { border: none; }

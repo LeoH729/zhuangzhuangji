@@ -1,0 +1,10 @@
+{
+  "name": "virtualPayment",
+  "version": "1.0.0",
+  "description": "微信小程序虚拟支付服务端云函数",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3",
+    "axios": "^1.6.0"
+  }
+}

@@ -1,36 +1,30 @@
-<!--pages/result/result.wxml-->
-<view class="container">
-  <!-- 核心对比区 (全屏自适应，留出底部按钮高度) -->
-  <view class="compare-container" bindtouchmove="onSliderMove" bindtouchstart="onSliderMove">
-    
-    <!-- 1. 底层：原图 -->
-    <view class="image-layer original-layer">
-      <image src="{{originalImage}}" mode="aspectFit" class="comp-img"></image>
-      <view class="layer-tag left">原图</view>
+<view class="container pb-safe">
+  <view class="result-box-container">
+    <view class="result-box">
+      <image wx:if="{{!previewImage.error}}" class="result-image fade-in {{previewImage.loaded ? 'visible' : 'skeleton-shimmer skeleton-bg'}}" src="{{previewImage.displayUrl}}" mode="widthFix" bindtap="onPreviewImage" bindload="onImageLoad" binderror="onImageError" style="{{previewImage.loaded ? '' : 'aspect-ratio: 2/3;'}}"></image>
+      <view wx:else class="result-image result-image-fallback">图片暂时无法显示</view>
     </view>
     
-    <!-- 2. 上层：效果图 (通过宽度控制显示区域) -->
-    <view class="image-layer result-layer" style="width: {{sliderValue}}%;">
-      <image src="{{resultImage}}" mode="aspectFit" class="comp-img"></image>
-      <view class="layer-tag right" style="opacity: {{sliderValue < 15 ? 0 : 1}}">上妆后</view>
-    </view>
-    
-    <!-- 3. 这个是分割线和拖拽手柄 -->
-    <view class="slider-handle-line" style="left: {{sliderValue}}%;">
-      <view class="slider-arrow">
-        <image src="/images/icon_slider_arrow.svg" mode="aspectFit"></image> <!-- 需准备图标，或用纯CSS箭头 -->
+    <!-- 评分区域 -->
+    <view class="rating-section" wx:if="{{previewImage.loaded && !previewImage.error && id}}">
+      <view class="rating-hint">{{rating ? '感谢您的评价' : '觉得效果如何？'}}</view>
+      <view class="rating-actions">
+        <view class="rate-pill {{rating === 'hang' ? 'selected' : ''}} {{rating && rating !== 'hang' ? 'faded' : ''}} {{rating ? 'locked' : ''}}" bindtap="onRate" data-value="hang">
+          <text class="rate-emoji">👍</text>
+          <text class="rate-label">夯</text>
+        </view>
+        <view class="rate-pill {{rating === 'la' ? 'selected' : ''}} {{rating && rating !== 'la' ? 'faded' : ''}} {{rating ? 'locked' : ''}}" bindtap="onRate" data-value="la">
+          <text class="rate-emoji">👎</text>
+          <text class="rate-label">拉</text>
+        </view>
       </view>
     </view>
-    
+  </view>
+  
+  <view class="action-box">
+    <button class="result-action-btn result-action-primary" bindtap="saveImage" hover-class="btn-hover">保存原图</button>
+    <button class="result-action-btn result-action-secondary {{isSavingPoster ? 'btn-disabled' : ''}}" bindtap="saveSharePoster" hover-class="btn-hover" disabled="{{isSavingPoster}}">生成分享海报</button>
   </view>
 
-  <!-- 底部操作区 -->
-  <view class="footer-actions">
-    <view style="width: 240rpx;">
-      <button class="btn-secondary-dark" hover-class="btn-hover" bindtap="goHome">返回首页</button>
-    </view>
-    <view style="width: 380rpx;">
-      <button class="btn-primary" hover-class="btn-hover" bindtap="saveImage">保存美照</button>
-    </view>
-  </view>
+  <canvas class="poster-canvas" id="sharePosterCanvas" type="2d"></canvas>
 </view>

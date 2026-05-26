@@ -1,103 +1,131 @@
 {
-    "setting": {
-        "es6": true,
-        "postcss": true,
-        "minified": true,
-        "uglifyFileName": false,
-        "enhance": true,
-        "packNpmRelationList": [],
-        "babelSetting": {
-            "ignore": [],
-            "disablePlugins": [],
-            "outputPath": ""
-        },
-        "useCompilerPlugins": false,
-        "minifyWXML": true,
-        "minifyWXSS": true,
-        "checkInvalidKey": true,
-        "checkSiteMap": true,
-        "uploadWithSourceMap": true,
-        "compileHotReLoad": false,
-        "useMultiFrameRuntime": true,
-        "useApiHook": true,
-        "useApiHostProcess": true,
-        "disableUseStrict": false,
-        "showShadowRootInWxmlPanel": true,
-        "scopeDataCheck": false,
-        "ignoreDevUnusedFiles": false,
-        "ignoreUploadUnusedFiles": true,
-        "checkAppSecretSwitch": false,
-        "useIsolateContext": true,
-        "userConfirmedBundleSwitch": false,
-        "packNpmManually": false,
-        "showES6CompileOption": false,
-        "debugOptions": {
-            "hidedInDevtools": [],
-            "showHeadInfo": false,
-            "showComponentHighlight": false,
-            "showBindingRangeHighlight": false
-        },
-        "compileWorklet": false,
-        "localPlugins": false,
-        "condition": false,
-        "swc": false,
-        "disableSWC": true
+  "setting": {
+    "es6": true,
+    "postcss": true,
+    "minified": true,
+    "uglifyFileName": false,
+    "enhance": true,
+    "packNpmRelationList": [],
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
     },
-    "compileType": "miniprogram",
-    "simulatorPluginLibVersion": {},
-    "packOptions": {
-        "ignore": [
-            {
-                "value": "wx-subscribe-sdk/**",
-                "type": "glob"
-            },
-            {
-                "value": "pages/index/**",
-                "type": "glob"
-            },
-            {
-                "value": "docs/.accelerate/**",
-                "type": "glob"
-            },
-            {
-                "value": "docs/lottie_animation_reference.js",
-                "type": "file"
-            },
-            {
-                "value": "README.md",
-                "type": "file"
-            },
-            {
-                "value": "README_CLOUD_SETUP.md",
-                "type": "file"
-            },
-            {
-                "value": "project.private.config.json",
-                "type": "file"
-            },
-            {
-                "value": "package.json",
-                "type": "file"
-            },
-            {
-                "value": "package-lock.json",
-                "type": "file"
-            },
-            {
-                "value": "cloudbase/**",
-                "type": "glob"
-            },
-            {
-                "value": "cloudfunctions/**",
-                "type": "glob"
-            }
-        ],
-        "include": []
+    "useCompilerPlugins": false,
+    "minifyWXML": true,
+    "minifyWXSS": true,
+    "checkInvalidKey": true,
+    "checkSiteMap": true,
+    "uploadWithSourceMap": true,
+    "compileHotReLoad": false,
+    "useMultiFrameRuntime": true,
+    "useApiHook": true,
+    "useApiHostProcess": true,
+    "disableUseStrict": false,
+    "showShadowRootInWxmlPanel": true,
+    "scopeDataCheck": false,
+    "ignoreDevUnusedFiles": false,
+    "ignoreUploadUnusedFiles": true,
+    "checkAppSecretSwitch": false,
+    "useIsolateContext": true,
+    "userConfirmedBundleSwitch": false,
+    "packNpmManually": false,
+    "showES6CompileOption": false,
+    "debugOptions": {
+      "hidedInDevtools": [],
+      "showHeadInfo": false,
+      "showComponentHighlight": false,
+      "showBindingRangeHighlight": false
     },
-    "appid": "wx2e1dbc56f270e910",
-    "editorSetting": {},
-    "libVersion": "3.10.1",
-    "cloudfunctionRoot": "cloudfunctions/",
-    "cloudbaseRoot": "cloudbase/",
-    "cloudfunctionTemplateRoot": "cloudfunctionTemplate/"
+    "compileWorklet": false,
+    "localPlugins": false,
+    "condition": false,
+    "swc": false,
+    "disableSWC": true
+  },
+  "compileType": "miniprogram",
+  "simulatorPluginLibVersion": {},
+  "packOptions": {
+    "ignore": [
+      {
+        "value": "wx-subscribe-sdk/**",
+        "type": "glob"
+      },
+      {
+        "value": "docs/.accelerate/**",
+        "type": "glob"
+      },
+      {
+        "value": "docs/lottie_animation_reference.js",
+        "type": "file"
+      },
+      {
+        "value": "README.md",
+        "type": "file"
+      },
+      {
+        "value": "README_CLOUD_SETUP.md",
+        "type": "file"
+      },
+      {
+        "value": "project.private.config.json",
+        "type": "file"
+      },
+      {
+        "value": "package.json",
+        "type": "file"
+      },
+      {
+        "value": "package-lock.json",
+        "type": "file"
+      },
+      {
+        "value": "node_modules/**",
+        "type": "glob"
+      },
+      {
+        "value": "cloudbase/**",
+        "type": "glob"
+      },
+      {
+        "value": "cloudfunctions/**",
+        "type": "glob"
+      },
+      {
+        "value": "docs/**",
+        "type": "glob"
+      },
+      {
+        "value": "scripts/**",
+        "type": "glob"
+      },
+      {
+        "value": "local-relay-gpt-image-2-*",
+        "type": "glob"
+      },
+      {
+        "value": "features_import_template.json",
+        "type": "file"
+      },
+      {
+        "value": "wxPaymentSDK/README.md",
+        "type": "file"
+      },
+      {
+        "value": "wxPaymentSDK/examples/**",
+        "type": "glob"
+      },
+      {
+        "value": "wxPaymentSDK/.DS_Store",
+        "type": "file"
+      }
+    ],
+    "include": []
+  },
+  "appid": "wx2e1dbc56f270e910",
+  "editorSetting": {},
+  "libVersion": "3.16.0",
+  "cloudfunctionRoot": "cloudfunctions/",
+  "cloudbaseRoot": "cloudbase/",
+  "cloudfunctionTemplateRoot": "cloudfunctionTemplate/"
 }

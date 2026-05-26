@@ -1,105 +1,237 @@
-/* 全局样式 */
+/* =========================================================================
+ * 优雅极简风格 全局样式系统
+ * ========================================================================= */
 
-/* 禁用点击高亮效果 */
-page,
-view,
-button,
-input,
-textarea,
-picker,
-switch,
-checkbox,
-radio,
-slider,
-image,
-text {
-  -webkit-tap-highlight-color: transparent;
+page {
+  /* 全局 CSS 变量 */
+  --color-primary: #1A1A1A;     /* 主色调：极简黑 */
+  --color-secondary: #F5F5F7;   /* 次要色：极简灰底 */
+  --color-accent: #007AFF;      /* 强调色：蓝色 */
+  --color-text-main: #222222;   /* 主文本色 */
+  --color-text-sub: #888888;    /* 副文本色 */
+  --color-border: #E5E5EA;      /* 边框色 */
+  --color-bg: #F7F8FA;          /* 全局背景色 */
+  --color-card-bg: #FFFFFF;     /* 卡片背景色 */
+
+  --radius-sm: 12rpx;
+  --radius-md: 24rpx;
+  --radius-lg: 36rpx;
+  --radius-xl: 48rpx;
+
+  --shadow-sm: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 12rpx 32rpx rgba(0, 0, 0, 0.06);
+
+  /* 全局重置 */
+  background-color: var(--color-bg);
+  color: var(--color-text-main);
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, "Segoe UI", Arial, Roboto, "PingFang SC", "miui", "Hiragino Sans GB", "Microsoft Yahei", sans-serif;
+  font-size: 28rpx;
+  line-height: 1.5;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
-view,
-text,
-image {
+/* 禁用点击高亮效果 */
+page, view, button, input, textarea, picker, switch, checkbox, radio, slider, image, text {
+  -webkit-tap-highlight-color: transparent;
+  box-sizing: border-box;
+}
+
+view, text, image {
   -webkit-touch-callout: none;
 }
 
-/* —— 全局按钮样式系统 (Global Button System) —— */
+/* 隐藏全局及 scroll-view 滚动条，保持极其纯净、原生的 App 视觉体验 */
+::-webkit-scrollbar,
+page::-webkit-scrollbar,
+scroll-view ::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  color: transparent !important;
+}
 
-/* 主要行动按钮 (Primary) - 粉色渐变 */
+/* —— 全局按钮样式系统 —— */
+
+/* 主要行动按钮 (Primary) - 极简黑 */
 .btn-primary {
   width: 100% !important;
-  height: 88rpx;
-  line-height: 88rpx;
-  border-radius: 44rpx; /* 全圆角 */
-  background: linear-gradient(90deg, #FF9A9E 0%, #FF7084 100%);
+  height: 96rpx;
+  line-height: 96rpx;
+  border-radius: var(--radius-xl);
+  background: var(--color-primary);
   color: #FFFFFF;
-  font-size: 34rpx;
-  font-weight: bold;
+  font-size: 32rpx;
+  font-weight: 600;
   text-align: center;
   border: none;
   display: flex;
   justify-content: center;
   align-items: center;
-  /* 柔和阴影 */
-  box-shadow: 0 8rpx 20rpx rgba(255, 112, 132, 0.3);
-  transition: transform 0.1s ease-in-out, opacity 0.2s;
-  padding: 0; /* 重置默认内边距 */
-  margin: 0;  /* 重置默认外边距 */
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.15s ease-out, opacity 0.15s;
+  padding: 0;
+  margin: 0;
 }
 .btn-primary::after { border: none; }
 
-/* 次要行动按钮 (Secondary) - 描边/白底 */
+/* 次要行动按钮 (Secondary) - 灰底黑字 */
 .btn-secondary {
   width: 100% !important;
-  height: 88rpx;
-  line-height: 88rpx;
-  border-radius: 44rpx;
-  background: rgba(255, 255, 255, 0.9);
-  color: #666666;
+  height: 96rpx;
+  line-height: 96rpx;
+  border-radius: var(--radius-xl);
+  background: var(--color-secondary);
+  color: var(--color-primary);
   font-size: 32rpx;
-  font-weight: 500;
-  border: 2rpx solid #E0E0E0;
+  font-weight: 600;
+  border: none;
   display: flex;
   justify-content: center;
   align-items: center;
-  box-sizing: border-box;
   padding: 0;
   margin: 0;
 }
 .btn-secondary::after { border: none; }
 
-/* 次要行动按钮 (Secondary) - 深色背景专用 (透明/磨砂) */
-.btn-secondary-dark {
-  width: 100% !important;
-  height: 88rpx;
-  line-height: 88rpx;
-  border-radius: 44rpx;
-  background: rgba(255, 255, 255, 0.15); /* 半透明白 */
-  color: #FFFFFF;
-  font-size: 32rpx;
-  font-weight: 500;
-  border: 2rpx solid rgba(255, 255, 255, 0.3);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  box-sizing: border-box;
-  padding: 0;
-  margin: 0;
-  backdrop-filter: blur(4px); /* 磨砂效果 */
-}
-.btn-secondary-dark::after { border: none; }
-
 /* 禁用状态 */
 .btn-disabled, 
 .btn-primary[disabled],
 button[disabled]:not([type]) {
-  background: #F5F5F5 !important;
-  color: #CCCCCC !important;
+  background: #E5E5EA !important;
+  color: #AAAAAA !important;
   box-shadow: none !important;
+}
+
+/* 点击反馈动效 */
+.btn-hover {
+  transform: scale(0.97);
+  opacity: 0.9;
+}
+
+/* —— 常用工具类 —— */
+.flex-row { display: flex; flex-direction: row; }
+.flex-col { display: flex; flex-direction: column; }
+.align-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.justify-center { justify-content: center; }
+.flex-1 { flex: 1; }
+
+.text-center { text-align: center; }
+.text-bold { font-weight: bold; }
+.text-sm { font-size: 24rpx; }
+.text-md { font-size: 28rpx; }
+.text-lg { font-size: 34rpx; }
+.text-xl { font-size: 40rpx; }
+.color-sub { color: var(--color-text-sub); }
+
+/* =========================================================================
+ * 优雅极简风格 全局骨架屏占位与渐显过渡系统
+ * ========================================================================= */
+
+/* 高性能扫光动画 */
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    #F5F5F7 25%,
+    #EBEBEF 37%,
+    #F5F5F7 63%
+  ) !important;
+  background-size: 400% 100% !important;
+  animation: skeleton-loading 1.4s ease infinite !important;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* 优雅淡入效果 */
+.fade-in {
+  opacity: 0 !important;
+  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.fade-in.visible {
   opacity: 1 !important;
 }
 
-/* 点击反馈动效 (需配合 hover-class="btn-hover") */
-.btn-hover {
-  transform: scale(0.96);
-  opacity: 0.9;
+/* 骨架基础占位底色 */
+.skeleton-bg {
+  background-color: #F5F5F7 !important;
+}
+
+/* WXML静态模拟骨架卡片区块 */
+.skeleton-img-box {
+  background-color: #F5F5F7 !important;
+  border-radius: var(--radius-md);
+  width: 100%;
+}
+
+.skeleton-text-line {
+  height: 28rpx !important;
+  background-color: #F5F5F7 !important;
+  border-radius: 6rpx !important;
+  width: 80% !important;
+  margin-top: 16rpx !important;
+}
+
+.skeleton-text-short {
+  height: 24rpx !important;
+  background-color: #F5F5F7 !important;
+  border-radius: 6rpx !important;
+  width: 45% !important;
+  margin-top: 12rpx !important;
+}
+
+/* 生成完成弱提醒 */
+.generation-notice {
+  position: fixed;
+  left: 30rpx;
+  right: 30rpx;
+  top: 18rpx;
+  z-index: 9999;
+  min-height: 76rpx;
+  box-sizing: border-box;
+  padding: 16rpx 20rpx;
+  border-radius: 16rpx;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10rpx 30rpx rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  backdrop-filter: blur(12px);
+}
+
+.generation-notice-dot {
+  width: 34rpx;
+  height: 34rpx;
+  border-radius: 50%;
+  background: #111111;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22rpx;
+  flex-shrink: 0;
+}
+
+.generation-notice-text {
+  flex: 1;
+  color: #222222;
+  font-size: 26rpx;
+  line-height: 1.35;
+}
+
+.generation-notice-action {
+  color: #111111;
+  font-size: 26rpx;
+  font-weight: 700;
+  flex-shrink: 0;
 }

@@ -5,7 +5,14 @@ Page({
         contactTypes: ['功能异常', '产品建议', '其他'],
         content: '',
         email: '',
-        isSubmitting: false
+        isSubmitting: false,
+        isAdmin: false
+    },
+
+    onShow() {
+        const app = getApp();
+        const isAdmin = !!(app.globalData.isAdmin || wx.getStorageSync('isAdmin'));
+        this.setData({ isAdmin });
     },
 
     onTypeChange(e) {
@@ -81,6 +88,12 @@ Page({
                 });
                 this.setData({ isSubmitting: false });
             }
+        });
+    },
+
+    goToFeedbackList() {
+        wx.navigateTo({
+            url: '/pages/feedback-list/feedback-list'
         });
     }
 })

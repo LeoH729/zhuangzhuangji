@@ -1,0 +1,7 @@
+<view class="container">
+  <view class="empty-state">
+    <view class="empty-title">该魔法暂时下架了</view>
+    <view class="empty-desc">试试其他魔法吧</view>
+    <button class="btn-primary empty-action" bindtap="goHome" hover-class="btn-hover">试试其他魔法</button>
+  </view>
+</view>

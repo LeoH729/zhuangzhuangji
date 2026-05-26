@@ -1,30 +1,45 @@
-<!--pages/generation-history/generation-history.wxml-->
-<view class="container">
-  <view class="list">
-    <!-- 骨架屏/加载中 -->
-    <view wx:if="{{loading}}" class="loading-view">
-      <view class="spinner"></view>
-      <text>加载中...</text>
-    </view>
-    
-    <!-- 空状态 -->
-    <view wx:if="{{!loading && historyList.length === 0}}" class="empty-view">
-      <image class="empty-icon" src="/images/empty.png" mode="aspectFit"></image>
-      <text>暂无试妆记录</text>
-    </view>
-    
-    <!-- 列表项 (预留) -->
-    <block wx:for="{{historyList}}" wx:key="id">
-      <view class="history-item">
-        <image class="result-img" src="{{item.resultUrl}}" mode="aspectFill"></image>
-        <view class="info-col">
-          <text class="style-name">{{item.styleName}}</text>
-          <text class="date-time">{{item.date}}</text>
+<view class="container pb-safe">
+  <view wx:if="{{loading}}" class="loading-view">
+    <view class="spinner"></view>
+  </view>
+  
+  <view wx:if="{{!loading && taskList.length === 0}}" class="empty-view">暂无任务记录</view>
+  
+  <view class="task-list">
+    <block wx:for="{{taskList}}" wx:key="id">
+      <view class="task-card" bindtap="onCardTap" data-item="{{item}}">
+        <view class="img-container {{item.status === 'succeeded' && !item.imageError && !item.image.loaded ? 'skeleton-shimmer skeleton-bg' : ''}}">
+          <!-- 生成完成且无错误 -->
+          <image wx:if="{{item.status === 'succeeded' && !item.imageError}}" class="task-img fade-in {{item.image.loaded ? 'visible' : ''}}" src="{{item.image.displayUrl}}" mode="aspectFill" lazy-load binderror="onImageError" bindload="onImageLoad" data-id="{{item.id}}"></image>
+          <!-- 正在生成中 -->
+          <view wx:elif="{{item.status === 'pending' || item.status === 'running'}}" class="img-placeholder generating">
+            <view class="spinner small-spinner"></view>
+          </view>
+          <!-- 图片加载失败 / 其他错误 -->
+          <view wx:else class="img-placeholder error">
+            <icon type="warn" size="18" color="#999"></icon>
+          </view>
         </view>
-        <view class="action-col">
-          <button class="view-btn" size="mini" bindtap="onViewImage" data-url="{{item.resultUrl}}">查看</button>
+        
+        <view class="task-info">
+          <view class="task-header">
+            <text class="feature-name">{{item.featureName}}</text>
+            <view class="status-tag {{item.status}}">
+              {{item.status === 'succeeded' ? '已完成' : (item.status === 'failed' ? '已失败' : '生成中')}}
+            </view>
+          </view>
+          
+          <text class="date-time">{{item.date}}</text>
+          
+          <view wx:if="{{item.status === 'failed' && item.errorMessage}}" class="error-wrapper">
+            <text class="error-label">失败原因：</text>
+            <text class="error-message">{{item.errorMessage}}</text>
+          </view>
         </view>
       </view>
     </block>
   </view>
+  
+  <view wx:if="{{loadingMore}}" class="loading-more">加载中...</view>
+  <view wx:if="{{!hasMore && taskList.length > 0}}" class="no-more">没有更多记录了</view>
 </view>

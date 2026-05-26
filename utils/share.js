@@ -1,0 +1,105 @@
+const HOME_PATH = '/pages/index/index'
+
+const HOME_SHARE_TITLE = 'Ai造梦 - 上传照片，一键生成梦图'
+
+const ROUTE_SHARE_MAP = {
+  'pages/index/index': {
+    title: HOME_SHARE_TITLE,
+    path: HOME_PATH,
+    timelineTitles: [
+      '上传照片，一键生成梦图',
+      '用 AI 做一张属于你的梦图',
+      '试试 Ai造梦，让照片变得更神奇',
+      '一张照片，生成另一种可能'
+    ]
+  },
+  'pages/points/points': {
+    title: '星光造梦，限时特惠！',
+    path: '/pages/points/points',
+    timelineTitle: HOME_SHARE_TITLE,
+    timelineRedirectHome: true
+  },
+  'pages/profile/profile': {
+    title: '我的 Ai造梦空间，查看星光与作品记录',
+    path: HOME_PATH,
+    timelineTitle: HOME_SHARE_TITLE,
+    timelineRedirectHome: true
+  },
+  'pages/generation-history/generation-history': {
+    title: 'Ai造梦任务列表，随时查看我的生成作品',
+    path: HOME_PATH,
+    timelineTitle: HOME_SHARE_TITLE,
+    timelineRedirectHome: true
+  },
+  'pages/feedback/feedback': {
+    title: '给 Ai造梦提建议，让魔法更好用',
+    path: HOME_PATH,
+    timelineTitle: HOME_SHARE_TITLE,
+    timelineRedirectHome: true
+  },
+  'pages/feedback-list/feedback-list': {
+    title: 'Ai造梦反馈管理，处理用户建议',
+    path: HOME_PATH,
+    timelineTitle: HOME_SHARE_TITLE,
+    timelineRedirectHome: true
+  },
+  'pages/analyzing/analyzing': {
+    title: 'Ai造梦正在绘制神奇图片',
+    path: HOME_PATH,
+    timelineTitle: HOME_SHARE_TITLE,
+    timelineRedirectHome: true
+  },
+  'pages/feature-unavailable/feature-unavailable': {
+    title: '这个魔法暂时下架了，试试其他魔法吧',
+    path: HOME_PATH,
+    timelineTitle: HOME_SHARE_TITLE,
+    timelineRedirectHome: true
+  }
+}
+
+const FEATURE_TIMELINE_TITLES = [
+  '我发现了一个好玩的AI生图玩法：{name}',
+  '这个{name}魔法有点上头',
+  '上传照片试试{name}，看看 AI 会怎么改造你',
+  '想看看你在{name}里会变成什么样吗'
+]
+
+const RESULT_TIMELINE_TITLES = [
+  '我用 Ai造梦生成了一张神奇的图片',
+  '这张 AI 梦图有点像另一个世界的我',
+  '刚生成了一张梦图，来试试同款魔法',
+  'AI 把我的照片变成了另一种可能'
+]
+
+function pickRandom(list = []) {
+  if (!list.length) return ''
+  return list[Math.floor(Math.random() * list.length)]
+}
+
+function fillTemplate(template, values = {}) {
+  return String(template || '').replace(/\{(\w+)\}/g, (_, key) => values[key] || '')
+}
+
+function getCurrentRoute() {
+  const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []
+  const current = pages[pages.length - 1]
+  return current && current.route ? current.route : 'pages/index/index'
+}
+
+function getDefaultShareConfig(route = getCurrentRoute()) {
+  return ROUTE_SHARE_MAP[route] || {
+    title: HOME_SHARE_TITLE,
+    path: HOME_PATH,
+    timelineTitle: HOME_SHARE_TITLE
+  }
+}
+
+module.exports = {
+  HOME_PATH,
+  HOME_SHARE_TITLE,
+  FEATURE_TIMELINE_TITLES,
+  RESULT_TIMELINE_TITLES,
+  pickRandom,
+  fillTemplate,
+  getDefaultShareConfig
+}
