@@ -23,8 +23,11 @@ async function refundPoints(openid, amount, featureId) {
 }
 
 async function runSyncGeneration(openid, featureId, imageUrls) {
+  const syncStartedAtMs = Date.now()
   let pointsDeducted = false
   let deductedAmount = 0
+  let modelProvider = ''
+  let modelCallId = ''
 
   try {
     const featureRes = await db.collection('ai_features').doc(featureId).get()
@@ -59,35 +62,63 @@ async function runSyncGeneration(openid, featureId, imageUrls) {
     if (!modelConfig) {
       throw new Error('模型配置不存在，请联系管理员')
     }
+    modelProvider = modelConfig.provider || ''
+    modelCallId = modelConfig.model_call_id || feature.model_call_id || ''
 
+    const executeStartedAtMs = Date.now()
     const execResult = await executeGeneration(cloud, modelConfig, feature, imageUrls, {
       clientBusinessId: `sync_${Date.now()}`
     })
+    const executionDurationMs = Date.now() - executeStartedAtMs
     if (!execResult || execResult.status !== 'completed' || !execResult.resultImageUrl) {
       throw new Error('当前模型通道为异步返回，请使用异步任务生成流程')
     }
     const resultImageUrl = execResult.resultImageUrl
+    const totalDurationMs = Date.now() - syncStartedAtMs
 
     const historyRes = await db.collection('generation_history').add({
       data: {
         _openid: openid,
         featureId: featureId,
         featureName: feature.name,
+        generationMode: 'sync',
+        provider: modelProvider,
+        modelCallId,
         photoUrl: imageUrls[0] || '',
         originalImages: imageUrls,
         resultUrl: resultImageUrl,
         pointsCost: feature.points_cost,
+        executionDurationMs,
+        totalDurationMs,
         rating: '',
         createdAt: db.serverDate()
       }
     })
 
+    console.log('[aiGenerate] sync generation completed', {
+      featureId,
+      provider: modelProvider,
+      modelCallId,
+      historyId: historyRes._id,
+      executionDurationMs,
+      totalDurationMs
+    })
+
     return {
       success: true,
       resultUrl: resultImageUrl,
-      historyId: historyRes._id
+      historyId: historyRes._id,
+      executionDurationMs,
+      totalDurationMs
     }
   } catch (err) {
+    console.error('[aiGenerate] sync generation failed', {
+      featureId,
+      provider: modelProvider,
+      modelCallId,
+      totalDurationMs: Date.now() - syncStartedAtMs,
+      error: err && err.message
+    })
     if (pointsDeducted && deductedAmount > 0) {
       try {
         await refundPoints(openid, deductedAmount, featureId)
@@ -199,4 +230,3 @@ exports.main = async (event, context) => {
     return { success: false, error: err.message || '生成失败' }
   }
 }
-

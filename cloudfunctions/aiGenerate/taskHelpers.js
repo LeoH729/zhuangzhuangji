@@ -4,6 +4,8 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
 
 const TASKS_COLLECTION = 'generation_tasks'
+const RUNNING_TIMEOUT_MS = 16 * 60 * 1000
+const UPSTREAM_POLL_INTERVAL_MS = 10000
 
 function buildTaskResponse(task) {
   if (!task) {
@@ -157,8 +159,6 @@ async function ensureWorker(openid, taskId) {
   const createdAt = task.createdAt
   const upstreamPolledAt = task.upstreamPolledAt
 
-  const RUNNING_TIMEOUT_MS = 3 * 60 * 1000 // 3 minutes
-  const UPSTREAM_POLL_INTERVAL_MS = 10000
   const taskStartTime = startedAt || createdAt
   const startTimeMs = taskStartTime ? new Date(taskStartTime).getTime() : 0
   const isStaleRunning = status === 'running' && (Date.now() - startTimeMs > RUNNING_TIMEOUT_MS)
@@ -200,7 +200,6 @@ async function listTasks(openid, page = 0, pageSize = 10) {
       .get()
 
     // 自动扫描待处理或超时卡死的任务进行静默拉起
-    const RUNNING_TIMEOUT_MS = 3 * 60 * 1000 // 3 minutes
     for (const item of res.data) {
       const isPending = item.status === 'pending'
       const taskStartTime = item.startedAt || item.createdAt
@@ -245,4 +244,3 @@ module.exports = {
   TASKS_COLLECTION,
   listTasks
 }
-

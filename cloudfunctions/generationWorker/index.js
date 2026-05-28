@@ -5,6 +5,15 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
 
 const TASKS_COLLECTION = 'generation_tasks'
+const RUNNING_TIMEOUT_MS = 16 * 60 * 1000
+
+function elapsedSince(value, fallbackMs = Date.now()) {
+  const time = value ? new Date(value).getTime() : 0
+  if (!time || Number.isNaN(time)) {
+    return 0
+  }
+  return Math.max(0, fallbackMs - time)
+}
 
 function isUpstreamAsyncProvider(provider = '') {
   return provider === 'toapis' || provider === 'supersolo_async'
@@ -13,7 +22,7 @@ function isUpstreamAsyncProvider(provider = '') {
 function normalizeWorkerError(err) {
   const isTimeout = err && (err.code === 'ECONNABORTED' || String(err.message || '').toLowerCase().includes('timeout'))
   if (isTimeout) {
-    return '模型响应超时（云函数单次上限 60 秒），请改用更快模型或迁移到长任务后端。'
+    return '模型响应超时（云函数单次上限 900 秒），请改用异步通道或迁移到长任务后端。'
   }
   return (err && err.message) || '生成失败'
 }
@@ -73,11 +82,12 @@ async function claimTask(taskId) {
   return claimRes.stats && claimRes.stats.updated === 1
 }
 
-async function markTaskFailed(task, errorMessage) {
+async function markTaskFailed(task, errorMessage, metrics = {}) {
   await db.collection(TASKS_COLLECTION).doc(task._id).update({
     data: {
       status: 'failed',
       errorMessage: errorMessage || '生成失败',
+      ...metrics,
       finishedAt: db.serverDate()
     }
   })
@@ -90,6 +100,7 @@ async function markTaskFailed(task, errorMessage) {
 }
 
 async function processTask(taskId) {
+  const processStartedAtMs = Date.now()
   const taskRes = await db.collection(TASKS_COLLECTION).doc(taskId).get()
   let task = taskRes.data
   if (!task) {
@@ -102,7 +113,6 @@ async function processTask(taskId) {
 
   // 关键防重与超时自愈：任务处于 running 时，如果是近期启动的，跳过防重；如果已运行过久，进行超时自愈
   if (task.status === 'running') {
-    const RUNNING_TIMEOUT_MS = 3 * 60 * 1000 // 3 minutes
     const taskStartTime = task.startedAt || task.createdAt
     const startTimeMs = taskStartTime ? new Date(taskStartTime).getTime() : 0
     const isStale = Date.now() - startTimeMs > RUNNING_TIMEOUT_MS
@@ -150,6 +160,7 @@ async function processTask(taskId) {
   task = refreshed.data || task
 
   let modelProvider = ''
+  let modelCallId = ''
   try {
     const modelRes = await db.collection('ai_models').where({
       model_call_id: task.modelCallIdSnapshot
@@ -159,6 +170,7 @@ async function processTask(taskId) {
       throw new Error('模型配置不存在，请联系管理员')
     }
     modelProvider = modelConfig.provider || ''
+    modelCallId = modelConfig.model_call_id || task.modelCallIdSnapshot || ''
 
     const featureSnapshot = {
       name: task.featureNameSnapshot || '',
@@ -166,6 +178,7 @@ async function processTask(taskId) {
       points_cost: task.pointsCost || 0
     }
 
+    const executeStartedAtMs = Date.now()
     const execResult = await executeGeneration(
       cloud,
       modelConfig,
@@ -176,6 +189,7 @@ async function processTask(taskId) {
         clientBusinessId: task._id
       }
     )
+    const executionDurationMs = Date.now() - executeStartedAtMs
 
     if (!execResult || execResult.status === 'pending') {
       await db.collection(TASKS_COLLECTION).doc(task._id).update({
@@ -184,8 +198,20 @@ async function processTask(taskId) {
           upstreamTaskId: (execResult && execResult.upstreamTaskId) || task.upstreamTaskId || '',
           upstreamStatus: (execResult && execResult.upstreamStatus) || 'queued',
           upstreamPolledAt: db.serverDate(),
+          lastExecutionDurationMs: executionDurationMs,
+          provider: modelProvider,
+          modelCallId,
           errorMessage: ''
         }
+      })
+      console.log('[generationWorker] upstream task pending', {
+        taskId: task._id,
+        provider: modelProvider,
+        modelCallId,
+        upstreamTaskId: (execResult && execResult.upstreamTaskId) || task.upstreamTaskId || '',
+        upstreamStatus: (execResult && execResult.upstreamStatus) || 'queued',
+        executionDurationMs,
+        workerCallDurationMs: Date.now() - processStartedAtMs
       })
       return {
         success: true,
@@ -196,17 +222,28 @@ async function processTask(taskId) {
     }
 
     const resultImageUrl = execResult.resultImageUrl
+    const completedAtMs = Date.now()
+    const totalDurationMs = elapsedSince(task.createdAt, completedAtMs)
+    const workerDurationMs = elapsedSince(task.startedAt, completedAtMs) || (completedAtMs - processStartedAtMs)
 
     const historyRes = await db.collection('generation_history').add({
       data: {
         _openid: task._openid,
         featureId: task.featureId || '',
         featureName: task.featureNameSnapshot || '',
+        generationMode: 'worker',
+        provider: modelProvider,
+        modelCallId,
         photoUrl: (task.imageUrls && task.imageUrls[0]) || '',
         originalImages: task.imageUrls || [],
         resultUrl: resultImageUrl,
         pointsCost: task.pointsCost || 0,
         taskId: task._id,
+        upstreamTaskId: execResult.upstreamTaskId || task.upstreamTaskId || '',
+        upstreamStatus: execResult.upstreamStatus || task.upstreamStatus || '',
+        executionDurationMs,
+        workerDurationMs,
+        totalDurationMs,
         rating: '',
         createdAt: db.serverDate()
       }
@@ -217,8 +254,27 @@ async function processTask(taskId) {
         status: 'succeeded',
         resultUrl: resultImageUrl,
         historyId: historyRes._id,
+        provider: modelProvider,
+        modelCallId,
+        upstreamTaskId: execResult.upstreamTaskId || task.upstreamTaskId || '',
+        upstreamStatus: execResult.upstreamStatus || task.upstreamStatus || '',
+        executionDurationMs,
+        workerDurationMs,
+        totalDurationMs,
         finishedAt: db.serverDate()
       }
+    })
+
+    console.log('[generationWorker] task completed', {
+      taskId: task._id,
+      provider: modelProvider,
+      modelCallId,
+      upstreamTaskId: execResult.upstreamTaskId || task.upstreamTaskId || '',
+      upstreamStatus: execResult.upstreamStatus || task.upstreamStatus || '',
+      historyId: historyRes._id,
+      executionDurationMs,
+      workerDurationMs,
+      totalDurationMs
     })
 
     return {
@@ -229,6 +285,13 @@ async function processTask(taskId) {
     }
   } catch (err) {
     console.error('[generationWorker] task failed', taskId, err)
+    const failedAtMs = Date.now()
+    const failureMetrics = {
+      provider: modelProvider,
+      modelCallId,
+      workerDurationMs: elapsedSince(task.startedAt, failedAtMs) || (failedAtMs - processStartedAtMs),
+      totalDurationMs: elapsedSince(task.createdAt, failedAtMs)
+    }
     const shouldRetryPending =
       isUpstreamAsyncProvider(modelProvider) &&
       !!task.upstreamTaskId &&
@@ -252,7 +315,7 @@ async function processTask(taskId) {
     }
 
     const normalizedError = normalizeWorkerError(err)
-    await markTaskFailed(task, normalizedError)
+    await markTaskFailed(task, normalizedError, failureMetrics)
     return { success: false, taskId, error: normalizedError }
   }
 }

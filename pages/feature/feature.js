@@ -28,7 +28,7 @@ Page({
   async onLoad(options) {
     app.syncGenerationNoticeToPage(this)
     const sceneId = await this.parseFeatureScene(options.scene)
-    const id = options.id || sceneId
+    const id = options.id ? decodeURIComponent(options.id) : sceneId
     if (id) {
       this.setData({ id })
       this.fetchDetail(id)
@@ -233,7 +233,7 @@ Page({
     const featureName = (this.data.feature && this.data.feature.name) || 'AI生图玩法'
     return {
       title: `我发现了一个好玩的AI生图玩法：${featureName}`,
-      path: `/pages/feature/feature?id=${this.data.id}`
+      path: `/pages/feature/feature?id=${encodeURIComponent(this.data.id)}`
     }
   },
 
@@ -241,7 +241,7 @@ Page({
     const featureName = (this.data.feature && this.data.feature.name) || 'AI生图玩法'
     return {
       title: fillTemplate(pickRandom(FEATURE_TIMELINE_TITLES), { name: featureName }),
-      query: `id=${this.data.id}`,
+      query: `id=${encodeURIComponent(this.data.id)}`,
       imageUrl: this.data.bannerImage.displayUrl || this.data.bannerImage.rawUrl || ''
     }
   }

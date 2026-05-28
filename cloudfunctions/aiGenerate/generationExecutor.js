@@ -1,5 +1,8 @@
 const axios = require('axios')
-const REQUEST_TIMEOUT_MS = 50000
+const FormData = require('form-data')
+const REQUEST_TIMEOUT_MS = 14 * 60 * 1000
+const IMAGE_DOWNLOAD_TIMEOUT_MS = 60 * 1000
+const STATUS_REQUEST_TIMEOUT_MS = 30 * 1000
 
 function buildRequestConfig(modelConfig) {
   return {
@@ -54,7 +57,7 @@ async function uploadRemoteUrlToCloud(cloud, imageUrl) {
   
   const response = await axios.get(targetUrl, {
     responseType: 'arraybuffer',
-    timeout: 20000
+    timeout: IMAGE_DOWNLOAD_TIMEOUT_MS
   })
   const ext = guessImageExtension(response.headers && response.headers['content-type'], imageUrl)
   const cloudPath = `generated_results/${Date.now()}_${Math.floor(Math.random() * 100000)}.${ext}`
@@ -97,6 +100,18 @@ async function materializeImageUrl(cloud, imageUrl) {
     return uploadB64ToCloud(cloud, rawUrl.slice(commaIndex + 1))
   }
   return uploadRemoteUrlToCloud(cloud, rawUrl)
+}
+
+async function downloadImageBuffer(imageUrl) {
+  const response = await axios.get(imageUrl, {
+    responseType: 'arraybuffer',
+    timeout: IMAGE_DOWNLOAD_TIMEOUT_MS
+  })
+  return {
+    buffer: Buffer.from(response.data),
+    contentType: (response.headers && response.headers['content-type']) || 'image/png',
+    extension: guessImageExtension(response.headers && response.headers['content-type'], imageUrl)
+  }
 }
 
 async function callCoze(modelConfig, feature, imageUrls) {
@@ -215,6 +230,57 @@ async function callSupersolo(cloud, modelConfig, feature, imageUrls) {
   return { status: 'completed', resultImageUrl }
 }
 
+async function callJiucan(cloud, modelConfig, feature, imageUrls) {
+  const httpImageUrl = await resolveHttpImageUrl(cloud, imageUrls)
+  if (!httpImageUrl) {
+    throw new Error('九参图生图缺少参考图')
+  }
+
+  const imageFile = await downloadImageBuffer(httpImageUrl)
+  const form = new FormData()
+  form.append('model', modelConfig.model_id)
+  form.append('prompt', feature.prompt || '')
+  form.append('n', String(modelConfig.n || 1))
+  form.append('size', modelConfig.size || '1024x1024')
+  form.append('response_format', modelConfig.response_format || 'b64_json')
+  form.append('image', imageFile.buffer, {
+    filename: `reference.${imageFile.extension}`,
+    contentType: imageFile.contentType
+  })
+
+  const baseUrl = normalizeBaseUrl(modelConfig.base_url)
+  const response = await axios.post(
+    `${baseUrl}/images/edits`,
+    form,
+    {
+      headers: {
+        ...form.getHeaders(),
+        Authorization: `Bearer ${modelConfig.api_key}`
+      },
+      timeout: REQUEST_TIMEOUT_MS
+    }
+  )
+
+  const providerRes = response.data
+  if (!providerRes || !providerRes.data || providerRes.data.length === 0) {
+    throw new Error(`九参执行报错: ${JSON.stringify((providerRes && providerRes.error) || providerRes)}`)
+  }
+
+  const imageResult = providerRes.data[0]
+  let resultImageUrl = ''
+
+  if (imageResult.b64_json) {
+    resultImageUrl = await uploadB64ToCloud(cloud, imageResult.b64_json)
+  } else if (imageResult.url) {
+    resultImageUrl = await uploadRemoteUrlToCloud(cloud, imageResult.url)
+  }
+
+  if (!resultImageUrl) {
+    throw new Error('九参未返回图片 URL 或 b64_json 数据')
+  }
+  return { status: 'completed', resultImageUrl }
+}
+
 function parseToapisResultUrl(taskRes) {
   const resultData = taskRes && taskRes.result && Array.isArray(taskRes.result.data)
     ? taskRes.result.data
@@ -239,7 +305,7 @@ async function fetchToapisTaskStatus(modelConfig, taskId) {
       headers: {
         Authorization: `Bearer ${modelConfig.api_key}`
       },
-      timeout: 15000
+      timeout: STATUS_REQUEST_TIMEOUT_MS
     }
   )
   return response.data
@@ -407,6 +473,9 @@ async function executeGeneration(cloud, modelConfig, feature, imageUrls, options
   }
   if (modelConfig.provider === 'supersolo') {
     return callSupersolo(cloud, modelConfig, feature, imageUrls)
+  }
+  if (modelConfig.provider === 'jiucan') {
+    return callJiucan(cloud, modelConfig, feature, imageUrls)
   }
   if (modelConfig.provider === 'supersolo_async') {
     return callSupersoloAsync(cloud, modelConfig, feature, imageUrls, options)

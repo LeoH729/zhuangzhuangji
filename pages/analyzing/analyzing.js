@@ -1,7 +1,7 @@
 const app = getApp()
 
 const POLL_INTERVAL_MS = 8000
-const POLL_TIMEOUT_MS = 5 * 60 * 1000
+const POLL_TIMEOUT_MS = 16 * 60 * 1000
 const ENSURE_WORKER_INTERVAL_MS = 30000
 
 Page({
@@ -51,6 +51,14 @@ Page({
       clearInterval(this.pollInterval)
       this.pollInterval = null
     }
+  },
+
+  shouldOpenResultForTask(taskId) {
+    const pages = getCurrentPages()
+    const currentPage = pages && pages.length ? pages[pages.length - 1] : null
+    return currentPage === this &&
+      currentPage.route === 'pages/analyzing/analyzing' &&
+      this.data.taskId === taskId
   },
 
   // 弃用客户端直调 generationWorker 以免微信客户端 15 秒限制抛出 "Error: timeout" 报错。
@@ -173,6 +181,9 @@ Page({
         app.finishTrackedGenerationTask(taskId, { silent: true })
         this.setData({ progress: 100, statusText: '生成完成' })
         setTimeout(() => {
+          if (!this.shouldOpenResultForTask(taskId)) {
+            return
+          }
           wx.redirectTo({
             url: `/pages/result/result?id=${task.historyId}&url=${encodeURIComponent(task.resultUrl)}`
           })

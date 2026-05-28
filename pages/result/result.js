@@ -32,8 +32,12 @@ Page({
   onLoad(options) {
     if (options.id) {
       const resultUrl = options.url ? decodeURIComponent(options.url) : ''
-      this.setResultUrl(resultUrl, { id: options.id })
-      this.fetchHistoryDetail(options.id)
+      this.setResultUrl(resultUrl, {
+        id: decodeURIComponent(options.id),
+        featureId: options.featureId ? decodeURIComponent(options.featureId) : '',
+        featureName: options.featureName ? decodeURIComponent(options.featureName) : this.data.featureName
+      })
+      this.fetchHistoryDetail(decodeURIComponent(options.id))
     } else if (options.url) {
       this.setResultUrl(decodeURIComponent(options.url), { id: options.id || '' })
     } else {
@@ -489,10 +493,32 @@ Page({
     })
   },
 
+  buildResultShareQuery() {
+    const params = []
+    if (this.data.id) {
+      params.push(`id=${encodeURIComponent(this.data.id)}`)
+    }
+    if (this.data.resultUrl) {
+      params.push(`url=${encodeURIComponent(this.data.resultUrl)}`)
+    }
+    if (this.data.featureId) {
+      params.push(`featureId=${encodeURIComponent(this.data.featureId)}`)
+    }
+    if (this.data.featureName) {
+      params.push(`featureName=${encodeURIComponent(this.data.featureName)}`)
+    }
+    return params.join('&')
+  },
+
+  buildResultSharePath() {
+    const query = this.buildResultShareQuery()
+    return query ? `/pages/result/result?${query}` : HOME_PATH
+  },
+
   onShareAppMessage() {
     return {
       title: '我用Ai造梦生成了一张神奇的图片',
-      path: this.data.featureId ? `/pages/feature/feature?id=${this.data.featureId}` : HOME_PATH,
+      path: this.buildResultSharePath(),
       imageUrl: this.data.previewImage.displayUrl || this.data.resultUrl || ''
     }
   },
@@ -500,7 +526,7 @@ Page({
   onShareTimeline() {
     return {
       title: pickRandom(RESULT_TIMELINE_TITLES),
-      query: this.data.featureId ? `shareTarget=feature&featureId=${this.data.featureId}` : 'shareTarget=home',
+      query: this.buildResultShareQuery(),
       imageUrl: this.data.previewImage.displayUrl || this.data.resultUrl || ''
     }
   }
