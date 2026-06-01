@@ -5,7 +5,6 @@
     <text class="generation-notice-action">查看</text>
   </view>
 
-  <!-- User Info -->
   <view class="user-header">
     <view class="avatar-wrap">
       <image class="avatar fade-in {{avatarLoaded ? 'visible' : 'skeleton-shimmer skeleton-bg'}}" src="{{userInfo.avatarUrl || 'https://dummyimage.com/150'}}" mode="aspectFill" bindload="onAvatarLoad" binderror="onAvatarError"></image>
@@ -19,10 +18,9 @@
     </view>
   </view>
 
-  <!-- Points Card -->
   <view class="points-card" bindtap="goToPoints">
     <view class="pc-left">
-      <view class="pc-title">✨ 我的星光</view>
+      <view class="pc-title">🌟 我的星光</view>
       <view class="pc-num">{{points}}</view>
     </view>
     <view class="pc-right">
@@ -30,7 +28,14 @@
     </view>
   </view>
 
-  <!-- Menu List -->
+  <view class="star-task-card">
+    <view class="star-task-title">星光任务</view>
+    <view class="star-task-row {{shareTask.completed ? 'done' : ''}}" bindtap="goToHomeFromTask">
+      <view class="star-task-text">{{shareTask.title}}</view>
+      <view class="star-task-progress {{shareTask.completed ? 'done' : ''}}">{{shareTask.completedCount}}/{{shareTask.limit}}</view>
+    </view>
+  </view>
+
   <view class="menu-list">
     <view class="menu-item" bindtap="goToHistory">
       <view class="menu-icon">📋</view>

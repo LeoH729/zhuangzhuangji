@@ -39,9 +39,37 @@
   background: var(--color-card-bg);
   border-radius: var(--radius-xl) var(--radius-xl) 0 0;
   box-shadow: 0 -4rpx 20rpx rgba(0,0,0,0.03);
+  position: relative;
+}
+
+.action-row {
   display: flex;
   flex-direction: row;
   gap: 20rpx;
+}
+
+.reward-bubble {
+  position: absolute;
+  right: 66rpx;
+  top: -26rpx;
+  padding: 10rpx 20rpx;
+  border-radius: 999rpx;
+  background: #FFD84D;
+  color: #111111;
+  font-size: 22rpx;
+  font-weight: 600;
+  box-shadow: 0 8rpx 24rpx rgba(0,0,0,0.16);
+}
+
+.reward-bubble::after {
+  content: "";
+  position: absolute;
+  right: 42rpx;
+  bottom: -8rpx;
+  width: 16rpx;
+  height: 16rpx;
+  background: #FFD84D;
+  transform: rotate(45deg);
 }
 
 .result-action-btn {
@@ -72,6 +100,80 @@
   background: #ffffff;
   color: #111111;
   border: 2rpx solid #111111;
+}
+
+.share-panel-mask {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 20;
+  background: rgba(0,0,0,0.36);
+  display: flex;
+  align-items: flex-end;
+}
+
+.share-panel {
+  width: 100%;
+  padding: 28rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  background: #ffffff;
+  border-radius: 28rpx 28rpx 0 0;
+}
+
+.share-panel-title {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #111111;
+  padding: 8rpx 8rpx 24rpx;
+}
+
+.share-panel-item {
+  width: 100%;
+  height: 96rpx;
+  margin: 0;
+  padding: 0 8rpx;
+  border-radius: 0;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  text-align: left;
+  border-bottom: 1rpx solid var(--color-border);
+}
+
+.share-panel-item::after {
+  border: none;
+}
+
+.share-panel-item.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.share-panel-icon {
+  width: 56rpx;
+  font-size: 34rpx;
+  color: #111111;
+}
+
+.share-panel-text {
+  flex: 1;
+  font-size: 30rpx;
+  color: #111111;
+}
+
+.share-panel-cancel {
+  height: 88rpx;
+  margin-top: 18rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 44rpx;
+  background: var(--color-secondary);
+  color: var(--color-text-main);
+  font-size: 28rpx;
+  font-weight: 600;
 }
 
 .poster-canvas {

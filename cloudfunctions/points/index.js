@@ -18,6 +18,10 @@ const CONFIG_COLLECTION = 'points_config'
 const CONFIG_ID = 'global'
 const USER_COLLECTION = 'user_points'
 const HISTORY_COLLECTION = 'points_history'
+const TASK_COLLECTION = 'user_star_tasks'
+const RESULT_SHARE_TASK_ID = 'result_share'
+const RESULT_SHARE_TASK_LIMIT = 2
+const RESULT_SHARE_TASK_REWARD = 10
 
 exports.main = async (event, context) => {
   const wxContext = cloud.getWXContext()
@@ -39,6 +43,10 @@ exports.main = async (event, context) => {
         return await rechargePoints(openid, amount, reason, title)
       case 'getHistory':
         return await getHistory(openid, event.limit, event.skip)
+      case 'getShareTask':
+        return await getShareTask(openid)
+      case 'claimShareReward':
+        return await claimShareReward(openid, event.channel, event.historyId)
       default:
         return { success: false, code: 'UNKNOWN_ACTION', message: '未知操作' }
     }
@@ -244,6 +252,143 @@ async function rechargePoints(openid, amount, reason = '', title = '') {
 }
 
 // 获取收支明细
+async function getShareTask(openid) {
+  console.log('[points] getShareTask', { openid })
+  if (!openid) {
+    return { success: false, code: 'NO_OPENID', message: '用户未登录' }
+  }
+  await ensureUserPoints(openid)
+  const taskId = `${openid}_${RESULT_SHARE_TASK_ID}`
+  let task = null
+  try {
+    const res = await db.collection(TASK_COLLECTION).doc(taskId).get()
+    task = res.data
+  } catch (_) { }
+
+  const completedCount = Math.min((task && task.completedCount) || 0, RESULT_SHARE_TASK_LIMIT)
+  return {
+    success: true,
+    data: {
+      taskId: RESULT_SHARE_TASK_ID,
+      title: '生成图片分享给好友/朋友圈可得20星光',
+      completedCount,
+      limit: RESULT_SHARE_TASK_LIMIT,
+      reward: RESULT_SHARE_TASK_REWARD,
+      completed: completedCount >= RESULT_SHARE_TASK_LIMIT
+    }
+  }
+}
+
+async function claimShareReward(openid, channel = '', historyId = '') {
+  console.log('[points] claimShareReward start', { openid, channel, historyId })
+  if (!openid) {
+    return { success: false, code: 'NO_OPENID', message: '用户未登录' }
+  }
+  const now = formatDateTime()
+  const taskId = `${openid}_${RESULT_SHARE_TASK_ID}`
+  const result = await db.runTransaction(async (transaction) => {
+    let userDoc = null
+    try {
+      userDoc = await transaction.collection(USER_COLLECTION).doc(openid).get()
+    } catch (_) { }
+
+    if (!userDoc || !userDoc.data) {
+      const cfgRes = await getConfig()
+      const initPoints = (cfgRes && cfgRes.data && cfgRes.data.initial_points) || 100
+      await transaction.collection(USER_COLLECTION).doc(openid).set({
+        data: {
+          points: initPoints,
+          name: (cfgRes && cfgRes.data && cfgRes.data.name) || '星光',
+          createdAt: now,
+          updatedAt: now
+        }
+      })
+      userDoc = await transaction.collection(USER_COLLECTION).doc(openid).get()
+    }
+
+    let taskDoc = null
+    try {
+      taskDoc = await transaction.collection(TASK_COLLECTION).doc(taskId).get()
+    } catch (_) { }
+
+    const currentCount = Math.min((taskDoc && taskDoc.data && taskDoc.data.completedCount) || 0, RESULT_SHARE_TASK_LIMIT)
+    const currentPoints = (userDoc && userDoc.data && userDoc.data.points) || 0
+    if (currentCount >= RESULT_SHARE_TASK_LIMIT) {
+      return {
+        rewarded: false,
+        completedCount: currentCount,
+        points: currentPoints,
+        completed: true
+      }
+    }
+
+    const nextCount = currentCount + 1
+    const taskData = {
+      _openid: openid,
+      taskKey: RESULT_SHARE_TASK_ID,
+      title: '生成图片分享给好友/朋友圈可得20星光',
+      completedCount: nextCount,
+      limit: RESULT_SHARE_TASK_LIMIT,
+      reward: RESULT_SHARE_TASK_REWARD,
+      lastChannel: channel || '',
+      lastHistoryId: historyId || '',
+      updatedAt: now
+    }
+
+    if (taskDoc && taskDoc.data) {
+      await transaction.collection(TASK_COLLECTION).doc(taskId).update({ data: taskData })
+    } else {
+      await transaction.collection(TASK_COLLECTION).doc(taskId).set({
+        data: {
+          ...taskData,
+          createdAt: now
+        }
+      })
+    }
+
+    await transaction.collection(USER_COLLECTION).doc(openid).update({
+      data: {
+        points: _.inc(RESULT_SHARE_TASK_REWARD),
+        updatedAt: now,
+        lastReason: `task_${RESULT_SHARE_TASK_ID}`
+      }
+    })
+
+    return {
+      rewarded: true,
+      completedCount: nextCount,
+      points: currentPoints + RESULT_SHARE_TASK_REWARD,
+      completed: nextCount >= RESULT_SHARE_TASK_LIMIT
+    }
+  })
+
+  if (result && result.rewarded) {
+    await addHistory(
+      openid,
+      'recharge',
+      RESULT_SHARE_TASK_REWARD,
+      `task_${RESULT_SHARE_TASK_ID}_${result.completedCount}`,
+      '分享生成图片奖励'
+    )
+  }
+
+  console.log('[points] claimShareReward done', result)
+
+  return {
+    success: true,
+    data: {
+      taskId: RESULT_SHARE_TASK_ID,
+      title: '生成图片分享给好友/朋友圈可得20星光',
+      completedCount: result.completedCount,
+      limit: RESULT_SHARE_TASK_LIMIT,
+      reward: RESULT_SHARE_TASK_REWARD,
+      completed: result.completed,
+      rewarded: result.rewarded,
+      points: result.points
+    }
+  }
+}
+
 async function getHistory(openid, limit = 20, skip = 0) {
   const res = await db.collection(HISTORY_COLLECTION)
     .where({ _openid: openid })

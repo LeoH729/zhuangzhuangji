@@ -12,6 +12,7 @@ const {
   fillTemplate,
   pickRandom
 } = require('../../utils/share.js')
+const { report } = require('../../utils/analytics.js')
 
 const FEATURE_DETAIL_CACHE_PREFIX = 'feature_detail_cache_'
 
@@ -141,6 +142,18 @@ Page({
         oldBanner
       )
     })
+    this.reportFeatureDetailView(feature)
+  },
+
+  reportFeatureDetailView(feature) {
+    if (!feature || this.reportedDetailViewId === feature._id) return
+    this.reportedDetailViewId = feature._id
+    report('feature_detail_view', {
+      feature_id: feature._id || this.data.id,
+      feature_name: feature.name || '',
+      feature_group: feature.group || '',
+      source: 'detail'
+    })
   },
 
   goToUnavailable() {
@@ -192,6 +205,13 @@ Page({
   },
 
   async submitGenerate() {
+    const feature = this.data.feature || {}
+    report('generate_click', {
+      feature_id: this.data.id,
+      feature_name: feature.name || '',
+      feature_group: feature.group || '',
+      image_count: this.data.images.length
+    })
     if (this.data.images.length === 0) {
       return wx.showToast({ title: '请上传图片', icon: 'none' })
     }
@@ -211,6 +231,12 @@ Page({
       })
       
       const fileIDs = await Promise.all(uploadTasks)
+      report('generation_submit', {
+        feature_id: this.data.id,
+        feature_name: feature.name || '',
+        feature_group: feature.group || '',
+        image_count: fileIDs.length
+      })
       
       // 2. Go to generating page (analyzing)
       wx.hideLoading()

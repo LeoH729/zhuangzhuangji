@@ -7,6 +7,7 @@ const {
   getNextRetryState,
   getRetryDelay
 } = require('../../utils/image-loader.js')
+const { report } = require('../../utils/analytics.js')
 
 const GROUPS_CACHE_KEY = 'index_feature_groups_cache'
 const FEATURES_CACHE_PREFIX = 'index_features_cache_'
@@ -119,6 +120,7 @@ Page({
 
       const processedItem = {
         ...item,
+        homeIndex: index,
         image
       }
       if (index % 2 === 0) {
@@ -128,6 +130,23 @@ Page({
       }
     })
     this.setData({ leftList, rightList })
+    this.reportFeatureExposures(list)
+  },
+
+  reportFeatureExposures(list) {
+    this.reportedExposureKeys = this.reportedExposureKeys || {}
+    list.forEach((item, index) => {
+      const key = `${this.data.currentGroup}_${item._id}`
+      if (this.reportedExposureKeys[key]) return
+      this.reportedExposureKeys[key] = true
+      report('feature_exposure', {
+        feature_id: item._id,
+        feature_name: item.name || '',
+        feature_group: item.group || this.data.currentGroup,
+        position: index + 1,
+        source: 'home'
+      })
+    })
   },
 
   onImageLoad(e) {
@@ -198,6 +217,15 @@ Page({
 
   goToFeature(e) {
     const id = e.currentTarget.dataset.id
+    const list = this.data.leftList.concat(this.data.rightList)
+    const item = list.find(feature => feature._id === id) || {}
+    report('feature_click', {
+      feature_id: id,
+      feature_name: item.name || '',
+      feature_group: item.group || this.data.currentGroup,
+      position: typeof item.homeIndex === 'number' ? item.homeIndex + 1 : 0,
+      source: 'home'
+    })
     wx.navigateTo({
       url: `/pages/feature/feature?id=${id}`
     })

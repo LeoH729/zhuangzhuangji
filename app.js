@@ -1,6 +1,8 @@
 // 全局分享能力注入（必须在所有 Page 之前执行）
 require('./utils/page-share-mixin');
 
+const { report } = require('./utils/analytics.js')
+
 function getTopPage() {
   const pages = getCurrentPages()
   return pages && pages.length ? pages[pages.length - 1] : null
@@ -32,6 +34,19 @@ App({
   onLaunch() {
     this.initCloud();
     this.restoreGenerationWatcher();
+  },
+
+  onHide() {
+    const currentPage = getTopPage()
+    if (currentPage && currentPage.route === 'pages/analyzing/analyzing') {
+      currentPage.hasReportedLeave = true
+      report('generation_wait_leave', {
+        feature_id: currentPage.data && currentPage.data.featureId || '',
+        task_id: currentPage.data && currentPage.data.taskId || '',
+        action: 'app_hide',
+        wait_seconds: Math.max(0, Math.round((Date.now() - (currentPage.pollStartedAt || Date.now())) / 1000))
+      })
+    }
   },
 
   // 初始化云开发
@@ -176,6 +191,12 @@ App({
         const task = res && res.result && res.result.task
         if (!task) continue
         if (task.status === 'succeeded') {
+          report('generation_success', {
+            feature_id: task.featureId || '',
+            task_id: taskId,
+            history_id: task.historyId || '',
+            source: 'watcher'
+          })
           this.finishTrackedGenerationTask(taskId)
         } else if (task.status === 'failed') {
           this.finishTrackedGenerationTask(taskId, { silent: true })

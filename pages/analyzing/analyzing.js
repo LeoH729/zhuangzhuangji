@@ -1,4 +1,5 @@
 const app = getApp()
+const { report } = require('../../utils/analytics.js')
 
 const POLL_INTERVAL_MS = 8000
 const POLL_TIMEOUT_MS = 16 * 60 * 1000
@@ -21,6 +22,11 @@ Page({
       })
       this.pollStartedAt = Date.now()
       this.lastEnsureWorkerAt = 0
+      this.hasReportedLeave = false
+      report('generation_wait_view', {
+        feature_id: options.featureId,
+        source: 'analyzing'
+      })
       this.startProgress()
       this.startAsyncGeneration()
     } else {
@@ -127,6 +133,7 @@ Page({
             }, POLL_INTERVAL_MS)
             this.pollTaskStatus(taskId)
           } else {
+            this.reportWaitLeave('timeout_back')
             wx.navigateBack()
           }
         }
@@ -178,12 +185,24 @@ Page({
       this.stopProgress()
 
       if (task.status === 'succeeded') {
+        report('generation_success', {
+          feature_id: task.featureId || this.data.featureId,
+          task_id: taskId,
+          history_id: task.historyId || '',
+          source: 'analyzing'
+        })
         app.finishTrackedGenerationTask(taskId, { silent: true })
         this.setData({ progress: 100, statusText: '生成完成' })
         setTimeout(() => {
           if (!this.shouldOpenResultForTask(taskId)) {
             return
           }
+          this.openingResult = true
+          report('generation_result_auto_open', {
+            feature_id: this.data.featureId,
+            task_id: taskId,
+            history_id: task.historyId || ''
+          })
           wx.redirectTo({
             url: `/pages/result/result?id=${task.historyId}&url=${encodeURIComponent(task.resultUrl)}`
           })
@@ -209,11 +228,27 @@ Page({
   onUnload() {
     this.stopProgress()
     this.stopPolling()
+    if (!this.openingResult && !this.goingHome) {
+      this.reportWaitLeave('back')
+    }
   },
 
   goHome() {
+    this.goingHome = true
+    this.reportWaitLeave('browse_other')
     wx.switchTab({
       url: '/pages/index/index'
+    })
+  },
+
+  reportWaitLeave(action) {
+    if (this.hasReportedLeave) return
+    this.hasReportedLeave = true
+    report('generation_wait_leave', {
+      feature_id: this.data.featureId,
+      task_id: this.data.taskId || '',
+      action,
+      wait_seconds: Math.max(0, Math.round((Date.now() - (this.pollStartedAt || Date.now())) / 1000))
     })
   }
 })

@@ -4,8 +4,7 @@
       <image wx:if="{{!previewImage.error}}" class="result-image fade-in {{previewImage.loaded ? 'visible' : 'skeleton-shimmer skeleton-bg'}}" src="{{previewImage.displayUrl}}" mode="widthFix" bindtap="onPreviewImage" bindload="onImageLoad" binderror="onImageError" style="{{previewImage.loaded ? '' : 'aspect-ratio: 2/3;'}}"></image>
       <view wx:else class="result-image result-image-fallback">图片暂时无法显示</view>
     </view>
-    
-    <!-- 评分区域 -->
+
     <view class="rating-section" wx:if="{{previewImage.loaded && !previewImage.error && id}}">
       <view class="rating-hint">{{rating ? '感谢您的评价' : '觉得效果如何？'}}</view>
       <view class="rating-actions">
@@ -20,10 +19,32 @@
       </view>
     </view>
   </view>
-  
+
   <view class="action-box">
-    <button class="result-action-btn result-action-primary" bindtap="saveImage" hover-class="btn-hover">保存原图</button>
-    <button class="result-action-btn result-action-secondary {{isSavingPoster ? 'btn-disabled' : ''}}" bindtap="saveSharePoster" hover-class="btn-hover" disabled="{{isSavingPoster}}">生成分享海报</button>
+    <view class="reward-bubble" wx:if="{{!shareTask.completed}}">🌟{{shareTask.reward}}星光奖励</view>
+    <view class="action-row">
+      <button class="result-action-btn result-action-secondary" bindtap="saveImage" hover-class="btn-hover">保存原图</button>
+      <button class="result-action-btn result-action-primary" bindtap="openSharePanel" hover-class="btn-hover">分享给好友</button>
+    </view>
+  </view>
+
+  <view wx:if="{{showSharePanel}}" class="share-panel-mask" catchtap="closeSharePanel">
+    <view class="share-panel" catchtap="noop">
+      <view class="share-panel-title">分享图片</view>
+      <button class="share-panel-item" open-type="share" bindtap="prepareFriendShare">
+        <text class="share-panel-icon">↗</text>
+        <text class="share-panel-text">分享给好友</text>
+      </button>
+      <view class="share-panel-item" bindtap="shareToTimeline">
+        <text class="share-panel-icon">◎</text>
+        <text class="share-panel-text">分享到朋友圈</text>
+      </view>
+      <view class="share-panel-item {{isSavingPoster ? 'disabled' : ''}}" bindtap="sharePosterFromPanel">
+        <text class="share-panel-icon">▣</text>
+        <text class="share-panel-text">生成分享海报</text>
+      </view>
+      <view class="share-panel-cancel" bindtap="closeSharePanel">取消</view>
+    </view>
   </view>
 
   <canvas class="poster-canvas" id="sharePosterCanvas" type="2d"></canvas>

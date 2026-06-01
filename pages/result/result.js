@@ -12,6 +12,7 @@ const {
   RESULT_TIMELINE_TITLES,
   pickRandom
 } = require('../../utils/share.js')
+const { report } = require('../../utils/analytics.js')
 
 const POSTER_CANVAS_ID = 'sharePosterCanvas'
 const POSTER_WIDTH = 750
@@ -26,10 +27,27 @@ Page({
     resultUrl: '',
     previewImage: createImageState('', IMAGE_STYLES.RESULT_PREVIEW),
     rating: '', // 'hang' | 'la' | ''
-    isSavingPoster: false
+    isSavingPoster: false,
+    showSharePanel: false,
+    shareTask: {
+      completedCount: 0,
+      limit: 2,
+      reward: 10,
+      completed: false
+    }
+  },
+
+  onShow() {
+    this.fetchShareTask()
+    if (typeof wx.showShareMenu === 'function') {
+      wx.showShareMenu({
+        menus: ['shareAppMessage', 'shareTimeline']
+      })
+    }
   },
 
   onLoad(options) {
+    this.reportResultView(options)
     if (options.id) {
       const resultUrl = options.url ? decodeURIComponent(options.url) : ''
       this.setResultUrl(resultUrl, {
@@ -45,8 +63,170 @@ Page({
     }
   },
 
+  reportResultView(options) {
+    report('result_view', {
+      history_id: options.id ? decodeURIComponent(options.id) : '',
+      feature_id: options.featureId ? decodeURIComponent(options.featureId) : '',
+      source: options.id ? 'history_or_generation' : 'url'
+    })
+  },
+
   onUnload() {
     this.clearImageRetryTimers()
+    this.clearShareRewardTimers()
+  },
+
+  fetchShareTask() {
+    wx.cloud.callFunction({
+      name: 'points',
+      data: { action: 'getShareTask' }
+    }).then(res => {
+      if (res.result && res.result.success && res.result.data) {
+        this.setData({ shareTask: res.result.data })
+      }
+    }).catch(err => {
+      console.warn('[Result] fetch share task failed:', err)
+    })
+  },
+
+  openSharePanel() {
+    report('result_share_button_click', {
+      history_id: this.data.id || '',
+      feature_id: this.data.featureId || ''
+    })
+    this.setData({ showSharePanel: true })
+  },
+
+  closeSharePanel() {
+    this.setData({ showSharePanel: false })
+  },
+
+  noop() {},
+
+  prepareFriendShare() {
+    this.pendingShareChannel = 'friend'
+    report('result_share_option_click', {
+      channel: 'friend',
+      action: 'open_share_sheet',
+      history_id: this.data.id || '',
+      feature_id: this.data.featureId || ''
+    })
+  },
+
+  shareToTimeline() {
+    this.pendingShareChannel = ''
+    this.setData({ showSharePanel: false })
+    report('result_share_option_click', {
+      channel: 'timeline_guide',
+      action: 'show_top_menu_guide',
+      history_id: this.data.id || '',
+      feature_id: this.data.featureId || ''
+    })
+    if (typeof wx.showShareMenu === 'function') {
+      wx.showShareMenu({
+        menus: ['shareTimeline']
+      })
+    }
+    wx.showModal({
+      title: '分享到朋友圈',
+      content: '请点击右上角三点菜单，选择“分享到朋友圈”。触发后会自动发放星光奖励。',
+      showCancel: false,
+      confirmText: '知道了'
+    })
+  },
+
+  sharePosterFromPanel() {
+    if (this.data.isSavingPoster) return
+    this.setData({ showSharePanel: false })
+    report('result_share_option_click', {
+      channel: 'poster',
+      history_id: this.data.id || '',
+      feature_id: this.data.featureId || ''
+    })
+    this.saveSharePoster()
+  },
+
+  scheduleShareReward(channel) {
+    const historyId = this.data.id || ''
+    const claimKey = `${channel || 'unknown'}:${historyId}`
+    if (!this.shareRewardTimers) {
+      this.shareRewardTimers = []
+    }
+    if (!this.shareRewardScheduledKeys) {
+      this.shareRewardScheduledKeys = {}
+    }
+    if (this.shareRewardScheduledKeys[claimKey]) {
+      return
+    }
+    this.shareRewardScheduledKeys[claimKey] = true
+    const timer = setTimeout(() => {
+      delete this.shareRewardScheduledKeys[claimKey]
+      this.claimShareReward(channel)
+    }, 2000)
+    this.shareRewardTimers.push(timer)
+  },
+
+  clearShareRewardTimers() {
+    if (!this.shareRewardTimers) return
+    this.shareRewardTimers.forEach(timer => clearTimeout(timer))
+    this.shareRewardTimers = []
+    this.shareRewardScheduledKeys = {}
+  },
+
+  async claimShareReward(channel) {
+    const historyId = this.data.id || ''
+    const claimKey = `${channel || 'unknown'}:${historyId}`
+    const now = Date.now()
+    if (this.shareRewardClaimingKey === claimKey) {
+      return
+    }
+    if (this.lastShareRewardClaim && this.lastShareRewardClaim.key === claimKey && now - this.lastShareRewardClaim.at < 5000) {
+      return
+    }
+    this.shareRewardClaimingKey = claimKey
+    try {
+      console.log('[Result] claimShareReward start', {
+        channel,
+        historyId
+      })
+      const res = await wx.cloud.callFunction({
+        name: 'points',
+        data: {
+          action: 'claimShareReward',
+          channel,
+          historyId
+        }
+      })
+      console.log('[Result] claimShareReward result', res && res.result)
+      const data = res.result && res.result.data
+      if (!res.result || !res.result.success || !data) {
+        wx.showToast({ title: (res.result && res.result.message) || '奖励领取失败', icon: 'none' })
+        return
+      }
+
+      this.setData({ shareTask: data })
+      if (typeof data.points === 'number') {
+        app.globalData.userPoints = data.points
+        wx.setStorageSync('userPoints', data.points)
+      }
+      report('star_task_progress', {
+        task_id: data.taskId,
+        completed_count: data.completedCount,
+        limit: data.limit,
+        completed: data.completed ? 1 : 0,
+        channel
+      })
+      if (data.rewarded) {
+        this.lastShareRewardClaim = { key: claimKey, at: Date.now() }
+        wx.showToast({ title: `星光 +${data.reward}`, icon: 'success' })
+      }
+    } catch (err) {
+      console.error('[Result] claim share reward failed:', err)
+    } finally {
+      if (this.shareRewardClaimingKey === claimKey) {
+        this.shareRewardClaimingKey = ''
+      }
+    }
   },
 
   async fetchHistoryDetail(id) {
@@ -120,6 +300,10 @@ Page({
 
   saveImage() {
     if (!this.data.resultUrl) return
+    report('result_save_click', {
+      history_id: this.data.id || '',
+      feature_id: this.data.featureId || ''
+    })
     
     wx.showLoading({ title: '保存中...' })
     if (this.data.resultUrl.startsWith('cloud://')) {
@@ -516,6 +700,15 @@ Page({
   },
 
   onShareAppMessage() {
+    const channel = this.pendingShareChannel || 'friend'
+    this.pendingShareChannel = ''
+    this.setData({ showSharePanel: false })
+    report('result_share_invoke', {
+      channel,
+      history_id: this.data.id || '',
+      feature_id: this.data.featureId || ''
+    })
+    this.scheduleShareReward(channel)
     return {
       title: '我用Ai造梦生成了一张神奇的图片',
       path: this.buildResultSharePath(),
@@ -524,6 +717,13 @@ Page({
   },
 
   onShareTimeline() {
+    this.setData({ showSharePanel: false })
+    report('result_share_invoke', {
+      channel: 'timeline',
+      history_id: this.data.id || '',
+      feature_id: this.data.featureId || ''
+    })
+    this.scheduleShareReward('timeline')
     return {
       title: pickRandom(RESULT_TIMELINE_TITLES),
       query: this.buildResultShareQuery(),

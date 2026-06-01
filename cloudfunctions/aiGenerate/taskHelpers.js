@@ -14,6 +14,7 @@ function buildTaskResponse(task) {
 
   return {
     taskId: task._id,
+    featureId: task.featureId || '',
     status: task.status,
     upstreamStatus: task.upstreamStatus || '',
     resultUrl: task.resultUrl || '',
