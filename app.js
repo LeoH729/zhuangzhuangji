@@ -15,6 +15,7 @@ App({
     userInfo: null,
     openid: null,
     userPoints: 0,
+    version: '1.4.0',
     pointsConfig: {
       name: '妆妆蛋',
       initial_points: 100,
@@ -26,7 +27,7 @@ App({
     generationNotice: {
       visible: false,
       taskId: '',
-      message: '生成已完成，可前往任务列表查看'
+      message: '生成已完成，可前往生成列表查看'
     }
   },
 
@@ -183,7 +184,8 @@ App({
 
     this.isPollingGenerationWatchTasks = true
     try {
-      for (const taskId of taskIds) {
+      for (let i = 0; i < taskIds.length; i += 1) {
+        const taskId = taskIds[i]
         const res = await wx.cloud.callFunction({
           name: 'aiGenerate',
           data: { action: 'getTaskStatus', taskId }
@@ -219,7 +221,7 @@ App({
     const notice = {
       visible: true,
       taskId,
-      message: '生成已完成，可前往任务列表查看'
+      message: '生成已完成，可前往生成列表查看'
     }
     this.globalData.generationNotice = notice
     wx.setStorageSync('generationNotice', notice)

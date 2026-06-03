@@ -118,11 +118,10 @@ Page({
         oldItem && oldItem.image
       )
 
-      const processedItem = {
-        ...item,
+      const processedItem = Object.assign({}, item, {
         homeIndex: index,
         image
-      }
+      })
       if (index % 2 === 0) {
         leftList.push(processedItem)
       } else {

@@ -58,8 +58,9 @@ page {
 
 .feedback-footer {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
+  gap: 16rpx;
   font-size: 24rpx;
   color: #999;
 }
@@ -216,16 +217,6 @@ page {
   display: inline-block;
 }
 
-.reply-input {
-  width: 100%;
-  min-height: 120rpx;
-  padding: 20rpx;
-  background: #f5f5f5;
-  border-radius: 8rpx;
-  font-size: 28rpx;
-  box-sizing: border-box;
-}
-
 .modal-footer {
   display: flex;
   border-top: 1rpx solid #eee;
@@ -249,6 +240,10 @@ page {
 .confirm-btn {
   background: #333;
   color: #fff;
+}
+
+.modal-btn.single {
+  border-right: none;
 }
 
 /* 分隔线 */

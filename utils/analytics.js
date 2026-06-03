@@ -4,10 +4,9 @@ function report(eventName, data = {}) {
   }
 
   try {
-    const payload = {
-      ...data,
+    const payload = Object.assign({}, data, {
       ts: Date.now()
-    }
+    })
     if (typeof wx.reportEvent === 'function') {
       wx.reportEvent(eventName, payload)
       return

@@ -226,7 +226,8 @@ Page({
                 console.log(`[Points] 发现 ${res.data.length} 笔未核销订单，启动后台补发流程...`);
                 let hasReconciled = false;
 
-                for (const order of res.data) {
+                for (let i = 0; i < res.data.length; i += 1) {
+                    const order = res.data[i];
                     console.log('[Points] 正在核销订单:', order.orderNo);
                     const queryRes = await wx.cloud.callFunction({
                         name: 'virtualPayment',

@@ -284,7 +284,14 @@ async function processTask(taskId) {
       historyId: historyRes._id
     }
   } catch (err) {
-    console.error('[generationWorker] task failed', taskId, err)
+    console.error('[generationWorker] task failed', taskId, {
+      message: err && err.message,
+      code: err && err.code,
+      status: err && err.response && err.response.status,
+      responseData: err && err.response && err.response.data,
+      method: err && err.config && err.config.method,
+      url: err && err.config && err.config.url
+    })
     const failedAtMs = Date.now()
     const failureMetrics = {
       provider: modelProvider,

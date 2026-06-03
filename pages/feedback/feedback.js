@@ -73,7 +73,7 @@ Page({
                     }, 2000);
                 } else {
                     wx.showToast({
-                        title: res.result?.message || '提交失败',
+                        title: (res.result && res.result.message) || '提交失败',
                         icon: 'none'
                     });
                     this.setData({ isSubmitting: false });

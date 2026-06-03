@@ -1,16 +1,55 @@
-<view class="container full-page">
-  <view class="generating-box">
-    <view class="elegant-spinner"></view>
-    <view class="loading-title">AI 正在绘制</view>
-    <view class="loading-subtitle">{{statusText || '魔法正在发生，预计需要几十秒'}}</view>
+<view class="container wait-page">
+  <view class="wait-hero">
+    <view class="wait-kicker">AI IMAGE LAB</view>
+    <view class="loading-title">AI绘制可能要1-5分钟 玩会小游戏吧</view>
+    <view class="status-row">
+      <text class="loading-subtitle">{{statusText}}</text>
+      <text class="elapsed-timer">{{elapsedText}}</text>
+    </view>
+  </view>
+
+  <view class="progress-section">
+    <view class="progress-meta">
+      <text>生成进度</text>
+      <text>{{progressText}}%</text>
+    </view>
     <view class="progress-bar">
       <view class="progress-inner" style="width: {{progress}}%"></view>
     </view>
-    
-    <!-- 提示与返回首页按钮 -->
-    <view class="bottom-actions">
-      <text class="hint-text">受不同大模型影响，生成时间可能需要1-5分钟</text>
-      <button class="btn-outline" bindtap="goHome" hover-class="btn-hover">去逛逛其他</button>
+  </view>
+
+  <view class="game-panel">
+    <view class="game-head">
+      <view>
+        <view class="game-title">SNAKE WAIT</view>
+        <view class="game-subtitle">在棋盘中滑动控制方向</view>
+      </view>
+      <view class="game-score">
+        <text>得分 {{snakeScore}}</text>
+        <text>最佳 {{snakeBest}}</text>
+      </view>
     </view>
+
+    <view
+      class="snake-board"
+      bindtouchstart="onSnakeTouchStart"
+      catchtouchmove="onSnakeTouchMove"
+    >
+      <view
+        wx:for="{{snakeCells}}"
+        wx:key="key"
+        class="snake-cell {{item.type}}"
+      ></view>
+      <view wx:if="{{snakeGameOver}}" class="game-over-layer">
+        <view class="game-over-text">GAME OVER</view>
+        <button class="restart-btn" bindtap="resetSnakeGame">再来一局</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="bottom-actions">
+    <button class="btn-outline {{resultReady ? 'ready' : ''}}" bindtap="handleBottomAction" hover-class="btn-hover">
+      {{resultReady ? '生图完成啦 去看看' : '不玩了 逛逛别的'}}
+    </button>
   </view>
 </view>

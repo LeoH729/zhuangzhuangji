@@ -28,6 +28,7 @@ Page({
     previewImage: createImageState('', IMAGE_STYLES.RESULT_PREVIEW),
     rating: '', // 'hang' | 'la' | ''
     isSavingPoster: false,
+    isSharedResult: false,
     showSharePanel: false,
     shareTask: {
       completedCount: 0,
@@ -48,6 +49,7 @@ Page({
 
   onLoad(options) {
     this.reportResultView(options)
+    this.setData({ isSharedResult: options.shared === '1' && !!options.featureId })
     if (options.id) {
       const resultUrl = options.url ? decodeURIComponent(options.url) : ''
       this.setResultUrl(resultUrl, {
@@ -90,6 +92,10 @@ Page({
   },
 
   openSharePanel() {
+    if (this.data.isSharedResult) {
+      this.goGenerateSame()
+      return
+    }
     report('result_share_button_click', {
       history_id: this.data.id || '',
       feature_id: this.data.featureId || ''
@@ -102,6 +108,20 @@ Page({
   },
 
   noop() {},
+
+  goGenerateSame() {
+    if (!this.data.featureId) {
+      wx.switchTab({ url: '/pages/index/index' })
+      return
+    }
+    report('result_generate_same_click', {
+      history_id: this.data.id || '',
+      feature_id: this.data.featureId || ''
+    })
+    wx.navigateTo({
+      url: `/pages/feature/feature?id=${encodeURIComponent(this.data.featureId)}`
+    })
+  },
 
   prepareFriendShare() {
     this.pendingShareChannel = 'friend'
@@ -267,7 +287,7 @@ Page({
         this.setData({ rating: value })
         wx.showToast({ title: '评价成功', icon: 'success' })
       } else {
-        wx.showToast({ title: res.result?.error || '评价失败', icon: 'none' })
+        wx.showToast({ title: (res.result && res.result.error) || '评价失败', icon: 'none' })
       }
     } catch (err) {
       wx.hideLoading()
@@ -372,10 +392,12 @@ Page({
     wx.showLoading({ title: '生成海报中...', mask: true })
 
     try {
-      const [resultImagePath, qrCodePath] = await Promise.all([
+      const posterAssets = await Promise.all([
         this.withTimeout(this.getPosterBaseImagePath(), POSTER_STEP_TIMEOUT_MS, '图片准备超时'),
         this.withTimeout(this.getFeatureQrCodePath(this.data.featureId), POSTER_STEP_TIMEOUT_MS, '小程序码生成超时')
       ])
+      const resultImagePath = posterAssets[0]
+      const qrCodePath = posterAssets[1]
       const posterPath = await this.withTimeout(
         this.drawSharePoster(resultImagePath, qrCodePath),
         POSTER_STEP_TIMEOUT_MS,
@@ -517,10 +539,12 @@ Page({
             const ctx = canvas.getContext('2d')
             ctx.scale(dpr, dpr)
 
-            const [resultImage, qrImage] = await Promise.all([
+            const posterImages = await Promise.all([
               this.loadCanvasImage(canvas, resultImagePath),
               this.loadCanvasImage(canvas, qrCodePath)
             ])
+            const resultImage = posterImages[0]
+            const qrImage = posterImages[1]
 
             const cardX = 76
             const cardY = 66
@@ -643,15 +667,14 @@ Page({
 
   setResultUrl(resultUrl, extra = {}) {
     const oldPreview = this.data.previewImage
-    this.setData({
-      ...extra,
+    this.setData(Object.assign({}, extra, {
       resultUrl: resultUrl || '',
       previewImage: createImageState(
         resultUrl,
         IMAGE_STYLES.RESULT_PREVIEW,
         oldPreview
       )
-    })
+    }))
   },
 
   scheduleImageRetry(key, callback, delay) {
@@ -679,6 +702,9 @@ Page({
 
   buildResultShareQuery() {
     const params = []
+    if (this.data.featureId) {
+      params.push('shared=1')
+    }
     if (this.data.id) {
       params.push(`id=${encodeURIComponent(this.data.id)}`)
     }

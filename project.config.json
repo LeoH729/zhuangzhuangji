@@ -84,6 +84,10 @@
         "type": "glob"
       },
       {
+        "value": "admin-web/**",
+        "type": "glob"
+      },
+      {
         "value": "cloudbase/**",
         "type": "glob"
       },

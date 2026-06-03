@@ -89,7 +89,7 @@ Page({
       });
       
       this.setData({
-        taskList: refresh ? list : [...this.data.taskList, ...list],
+        taskList: refresh ? list : (this.data.taskList || []).concat(list),
         page: pageIndex + 1,
         hasMore: list.length === this.data.pageSize,
         loading: false,
@@ -257,15 +257,14 @@ Page({
             IMAGE_STYLES.TASK_THUMB,
             existingItem.image
           );
-          return {
-            ...existingItem,
+          return Object.assign({}, existingItem, {
             status: fresh.status,
             rawResultUrl: fresh.rawResultUrl,
             historyId: fresh.historyId,
             image,
             errorMessage: fresh.errorMessage,
             imageError: false
-          };
+          });
         }
         return existingItem;
       });

@@ -12,6 +12,7 @@ npm-debug.log*
 
 # 依赖目录
 node_modules/
+admin-web/dist/
 
 # 临时文件
 *.tmp

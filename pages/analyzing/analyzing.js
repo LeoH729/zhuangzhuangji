@@ -4,17 +4,29 @@ const { report } = require('../../utils/analytics.js')
 const POLL_INTERVAL_MS = 8000
 const POLL_TIMEOUT_MS = 16 * 60 * 1000
 const ENSURE_WORKER_INTERVAL_MS = 30000
+const SNAKE_GRID_SIZE = 16
+const SNAKE_TICK_MS = 220
 
 Page({
   data: {
     featureId: '',
     images: [],
     progress: 5,
+    progressText: '5',
+    elapsedText: '00:00',
     statusText: '正在提交任务...',
-    taskId: ''
+    taskId: '',
+    resultReady: false,
+    resultUrl: '',
+    resultHistoryId: '',
+    snakeCells: [],
+    snakeScore: 0,
+    snakeBest: 0,
+    snakeGameOver: false
   },
 
   onLoad(options) {
+    this.initSnakeGame()
     if (options.featureId && options.images) {
       this.setData({
         featureId: options.featureId,
@@ -35,12 +47,177 @@ Page({
     }
   },
 
+  onShow() {
+    if (this.snakeReady && !this.data.snakeGameOver) {
+      this.startSnakeLoop()
+    }
+  },
+
+  onHide() {
+    this.stopSnakeLoop()
+  },
+
+  initSnakeGame() {
+    this.snakeReady = true
+    this.setData({
+      snakeBest: wx.getStorageSync('snake_wait_best') || 0
+    })
+    this.resetSnakeGame()
+  },
+
+  resetSnakeGame() {
+    const middle = Math.floor(SNAKE_GRID_SIZE / 2)
+    this.snake = [
+      { x: middle, y: middle },
+      { x: middle - 1, y: middle },
+      { x: middle - 2, y: middle }
+    ]
+    this.snakeDirection = { x: 1, y: 0 }
+    this.snakeNextDirection = { x: 1, y: 0 }
+    this.snakeFood = this.createSnakeFood()
+    this.setData({
+      snakeScore: 0,
+      snakeGameOver: false,
+      snakeCells: this.buildSnakeCells()
+    })
+    this.startSnakeLoop()
+  },
+
+  startSnakeLoop() {
+    if (this.snakeTimer || !this.snakeReady) return
+    this.snakeTimer = setInterval(() => {
+      this.stepSnakeGame()
+    }, SNAKE_TICK_MS)
+  },
+
+  stopSnakeLoop() {
+    if (this.snakeTimer) {
+      clearInterval(this.snakeTimer)
+      this.snakeTimer = null
+    }
+  },
+
+  buildSnakeCells() {
+    const snakeMap = {}
+    ;(this.snake || []).forEach((part, index) => {
+      snakeMap[`${part.x}_${part.y}`] = index === 0 ? 'head' : 'body'
+    })
+
+    const cells = []
+    for (let y = 0; y < SNAKE_GRID_SIZE; y += 1) {
+      for (let x = 0; x < SNAKE_GRID_SIZE; x += 1) {
+        const key = `${x}_${y}`
+        let type = snakeMap[key] || 'empty'
+        if (this.snakeFood && this.snakeFood.x === x && this.snakeFood.y === y) {
+          type = 'food'
+        }
+        cells.push({ key, type })
+      }
+    }
+    return cells
+  },
+
+  createSnakeFood() {
+    const occupied = {}
+    ;(this.snake || []).forEach(part => {
+      occupied[`${part.x}_${part.y}`] = true
+    })
+
+    let food = { x: 0, y: 0 }
+    let guard = 0
+    do {
+      food = {
+        x: Math.floor(Math.random() * SNAKE_GRID_SIZE),
+        y: Math.floor(Math.random() * SNAKE_GRID_SIZE)
+      }
+      guard += 1
+    } while (occupied[`${food.x}_${food.y}`] && guard < 200)
+    return food
+  },
+
+  stepSnakeGame() {
+    if (this.data.snakeGameOver) return
+
+    this.snakeDirection = this.snakeNextDirection
+    const head = this.snake[0]
+    const nextHead = {
+      x: head.x + this.snakeDirection.x,
+      y: head.y + this.snakeDirection.y
+    }
+
+    const hitWall =
+      nextHead.x < 0 ||
+      nextHead.y < 0 ||
+      nextHead.x >= SNAKE_GRID_SIZE ||
+      nextHead.y >= SNAKE_GRID_SIZE
+    const willEatFood = nextHead.x === this.snakeFood.x && nextHead.y === this.snakeFood.y
+    const bodyToCheck = willEatFood ? this.snake : this.snake.slice(0, -1)
+    const hitSelf = bodyToCheck.some(part => part.x === nextHead.x && part.y === nextHead.y)
+
+    if (hitWall || hitSelf) {
+      this.stopSnakeLoop()
+      this.setData({
+        snakeGameOver: true,
+        snakeCells: this.buildSnakeCells()
+      })
+      return
+    }
+
+    this.snake.unshift(nextHead)
+    const nextData = {}
+    if (willEatFood) {
+      const nextScore = this.data.snakeScore + 1
+      const nextBest = Math.max(this.data.snakeBest, nextScore)
+      wx.setStorageSync('snake_wait_best', nextBest)
+      this.snakeFood = this.createSnakeFood()
+      nextData.snakeScore = nextScore
+      nextData.snakeBest = nextBest
+    } else {
+      this.snake.pop()
+    }
+
+    nextData.snakeCells = this.buildSnakeCells()
+    this.setData(nextData)
+  },
+
+  onSnakeTouchStart(e) {
+    const touch = e.touches && e.touches[0]
+    if (!touch) return
+    this.snakeTouchStart = { x: touch.clientX, y: touch.clientY }
+  },
+
+  onSnakeTouchMove(e) {
+    const touch = e.touches && e.touches[0]
+    if (!touch || !this.snakeTouchStart) return
+    const deltaX = touch.clientX - this.snakeTouchStart.x
+    const deltaY = touch.clientY - this.snakeTouchStart.y
+    if (Math.max(Math.abs(deltaX), Math.abs(deltaY)) < 18) return
+
+    const nextDirection = Math.abs(deltaX) > Math.abs(deltaY)
+      ? { x: deltaX > 0 ? 1 : -1, y: 0 }
+      : { x: 0, y: deltaY > 0 ? 1 : -1 }
+    this.setSnakeDirection(nextDirection)
+    this.snakeTouchStart = { x: touch.clientX, y: touch.clientY }
+  },
+
+  setSnakeDirection(nextDirection) {
+    const current = this.snakeDirection || { x: 1, y: 0 }
+    const isReverse = current.x + nextDirection.x === 0 && current.y + nextDirection.y === 0
+    if (!isReverse) {
+      this.snakeNextDirection = nextDirection
+    }
+  },
+
   startProgress() {
     this.progressInterval = setInterval(() => {
       const current = this.data.progress
       if (current < 92) {
         const inc = Math.max(0.4, (95 - current) / 24)
-        this.setData({ progress: current + inc })
+        const nextProgress = current + inc
+        this.setData({
+          progress: nextProgress,
+          progressText: String(Math.round(nextProgress))
+        })
       }
     }, 800)
   },
@@ -49,6 +226,35 @@ Page({
     if (this.progressInterval) {
       clearInterval(this.progressInterval)
       this.progressInterval = null
+    }
+  },
+
+  formatElapsedTime(elapsedMs) {
+    const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000))
+    const minutes = Math.floor(totalSeconds / 60)
+    const seconds = totalSeconds % 60
+    const minuteText = minutes < 10 ? `0${minutes}` : String(minutes)
+    const secondText = seconds < 10 ? `0${seconds}` : String(seconds)
+    return `${minuteText}:${secondText}`
+  },
+
+  startGenerationTimer() {
+    this.stopGenerationTimer()
+    this.generationStartedAt = Date.now()
+    this.setData({
+      elapsedText: '00:00'
+    })
+    this.generationTimer = setInterval(() => {
+      this.setData({
+        elapsedText: this.formatElapsedTime(Date.now() - this.generationStartedAt)
+      })
+    }, 1000)
+  },
+
+  stopGenerationTimer() {
+    if (this.generationTimer) {
+      clearInterval(this.generationTimer)
+      this.generationTimer = null
     }
   },
 
@@ -67,10 +273,8 @@ Page({
       this.data.taskId === taskId
   },
 
-  // 弃用客户端直调 generationWorker 以免微信客户端 15 秒限制抛出 "Error: timeout" 报错。
-  // 现已统一由后台 ensureWorker 异步拉起，更稳定且控制台不再报红。
   triggerWorker(taskId) {
-    console.log('[analyzing] triggerWorker 已弃用，由 ensureWorker 异步拉起。')
+    console.log('[analyzing] triggerWorker 已弃用，改由 ensureWorker 异步拉起。', taskId)
   },
 
   async startAsyncGeneration() {
@@ -87,15 +291,16 @@ Page({
       const result = createRes.result
       if (!result || !result.success || !result.taskId) {
         this.stopProgress()
-        wx.showToast({ title: result?.error || '提交任务失败', icon: 'none' })
+        wx.showToast({ title: (result && result.error) || '提交任务失败', icon: 'none' })
         setTimeout(() => wx.navigateBack(), 2000)
         return
       }
 
       this.setData({
         taskId: result.taskId,
-        statusText: '任务已提交，AI 正在绘制中...'
+        statusText: 'AI 正在绘制中...'
       })
+      this.startGenerationTimer()
       app.trackGenerationTask(result.taskId)
 
       this.pollInterval = setInterval(() => {
@@ -185,6 +390,7 @@ Page({
       this.stopProgress()
 
       if (task.status === 'succeeded') {
+        this.stopGenerationTimer()
         report('generation_success', {
           feature_id: task.featureId || this.data.featureId,
           task_id: taskId,
@@ -192,31 +398,14 @@ Page({
           source: 'analyzing'
         })
         app.finishTrackedGenerationTask(taskId, { silent: true })
-        this.setData({ progress: 100, statusText: '生成完成' })
-        setTimeout(() => {
-          if (!this.shouldOpenResultForTask(taskId)) {
-            return
-          }
-          this.openingResult = true
-          report('generation_result_auto_open', {
-            feature_id: this.data.featureId,
-            task_id: taskId,
-            history_id: task.historyId || ''
-          })
-          wx.redirectTo({
-            url: `/pages/result/result?id=${task.historyId}&url=${encodeURIComponent(task.resultUrl)}`
-          })
-        }, 500)
+        this.handleGenerationSucceeded(taskId, task)
         return
       }
 
       if (task.status === 'failed') {
+        this.stopGenerationTimer()
         app.finishTrackedGenerationTask(taskId, { silent: true })
-        wx.showToast({
-          title: task.errorMessage || '生成失败',
-          icon: 'none'
-        })
-        setTimeout(() => wx.navigateBack(), 2000)
+        this.showGenerationFailedModal(task)
       }
     } catch (err) {
       console.error('[analyzing] poll failed', err)
@@ -225,12 +414,83 @@ Page({
     }
   },
 
+  handleGenerationSucceeded(taskId, task) {
+    this.setData({
+      progress: 100,
+      progressText: '100',
+      statusText: '生成完成',
+      resultReady: true,
+      resultUrl: task.resultUrl || '',
+      resultHistoryId: task.historyId || ''
+    })
+  },
+
+  showGenerationFailedModal(task = {}) {
+    this.stopSnakeLoop()
+    this.setData({
+      statusText: '生成失败'
+    })
+    wx.showModal({
+      title: '生图失败',
+      content: '因网络原因导致生图失败，您的星光已返还，请返回重试',
+      confirmText: '确认',
+      showCancel: false,
+      success: () => {
+        this.returnToFeatureDetail(task)
+      }
+    })
+  },
+
+  returnToFeatureDetail(task = {}) {
+    const featureId = this.data.featureId || task.featureId || ''
+    this.leavingAfterFailure = true
+    if (featureId) {
+      wx.redirectTo({
+        url: `/pages/feature/feature?id=${encodeURIComponent(featureId)}`
+      })
+      return
+    }
+    wx.navigateBack()
+  },
+
+  openResultPage() {
+    if (!this.data.resultHistoryId && !this.data.resultUrl) {
+      return
+    }
+    this.openingResult = true
+    report('generation_result_open_click', {
+      feature_id: this.data.featureId,
+      task_id: this.data.taskId || '',
+      history_id: this.data.resultHistoryId || ''
+    })
+    const params = []
+    if (this.data.resultHistoryId) {
+      params.push(`id=${encodeURIComponent(this.data.resultHistoryId)}`)
+    }
+    if (this.data.resultUrl) {
+      params.push(`url=${encodeURIComponent(this.data.resultUrl)}`)
+    }
+    wx.redirectTo({
+      url: `/pages/result/result?${params.join('&')}`
+    })
+  },
+
   onUnload() {
+    this.stopSnakeLoop()
     this.stopProgress()
     this.stopPolling()
-    if (!this.openingResult && !this.goingHome) {
+    this.stopGenerationTimer()
+    if (!this.openingResult && !this.goingHome && !this.leavingAfterFailure) {
       this.reportWaitLeave('back')
     }
+  },
+
+  handleBottomAction() {
+    if (this.data.resultReady) {
+      this.openResultPage()
+      return
+    }
+    this.goHome()
   },
 
   goHome() {

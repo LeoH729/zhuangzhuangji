@@ -53,12 +53,15 @@ Page({
       const avatarUrlChanged = this.data.userInfo.avatarUrl !== userInfo.avatarUrl
       const shouldResetAvatar = !this.data.hasUserInfo || avatarUrlChanged
 
-      this.setData({
+      const nextData = {
         userInfo,
         hasUserInfo: true,
-        registerDate,
-        ...(shouldResetAvatar ? { avatarLoaded: false } : {})
-      })
+        registerDate
+      }
+      if (shouldResetAvatar) {
+        nextData.avatarLoaded = false
+      }
+      this.setData(nextData)
       this.fetchPoints()
       this.fetchShareTask()
     }
@@ -84,12 +87,15 @@ Page({
     const avatarUrlChanged = this.data.userInfo.avatarUrl !== userInfo.avatarUrl
     const shouldResetAvatar = !this.data.hasUserInfo || avatarUrlChanged
 
-    this.setData({
+    const nextData = {
       userInfo,
       hasUserInfo: true,
-      registerDate,
-      ...(shouldResetAvatar ? { avatarLoaded: false } : {})
-    })
+      registerDate
+    }
+    if (shouldResetAvatar) {
+      nextData.avatarLoaded = false
+    }
+    this.setData(nextData)
 
     wx.cloud.callFunction({
       name: 'login',
@@ -124,10 +130,9 @@ Page({
       data: { action: 'getShareTask' }
     }).then(res => {
       if (res.result && res.result.success && res.result.data) {
-        const task = {
-          ...res.result.data,
+        const task = Object.assign({}, res.result.data, {
           title: '生成图片分享给好友/朋友圈可得20星光'
-        }
+        })
         this.setData({ shareTask: task })
         report('star_task_status', {
           task_id: task.taskId,
@@ -156,5 +161,15 @@ Page({
   goToFeedback() {
     if (!this.data.hasUserInfo) return this.getUserProfile()
     wx.navigateTo({ url: '/pages/feedback/feedback' })
+  },
+
+  showAbout() {
+    const version = (app.globalData && app.globalData.version) || '1.4.0'
+    wx.showModal({
+      title: '关于我们',
+      content: `作者：厦门超级独奏\n版本号：${version}`,
+      showCancel: false,
+      confirmText: '知道了'
+    })
   }
 })

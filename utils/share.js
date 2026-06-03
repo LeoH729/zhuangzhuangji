@@ -30,7 +30,7 @@ const ROUTE_SHARE_MAP = {
     timelineRedirectHome: true
   },
   'pages/generation-history/generation-history': {
-    title: 'Ai造梦任务列表，随时查看我的生成作品',
+    title: 'Ai造梦生成列表，随时查看我的生成作品',
     path: HOME_PATH,
     timelineTitles: DEFAULT_TIMELINE_TITLES,
     timelineRedirectHome: true

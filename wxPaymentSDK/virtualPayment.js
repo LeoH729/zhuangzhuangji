@@ -61,19 +61,20 @@ class WxVirtualPaymentSDK {
       if (!signRes.result || !signRes.result.success) {
         return {
           success: false,
-          message: signRes.result?.message || '获取支付签名失败',
-          code: signRes.result?.code || 'SIGN_FAILED'
+          message: (signRes.result && signRes.result.message) || '获取支付签名失败',
+          code: (signRes.result && signRes.result.code) || 'SIGN_FAILED'
         };
       }
 
-      const { payParams, orderNo } = signRes.result.data;
+      const signData = signRes.result.data || {};
+      const payParams = signData.payParams || {};
+      const orderNo = signData.orderNo;
       console.log('[VirtualPay] 成功获取支付参数和订单号:', { orderNo, payParams });
 
       // 3. 调起小程序虚拟支付 API
       console.log('[VirtualPay] 调起微信官方虚拟支付界面...');
       return new Promise((resolve) => {
-        wx.requestVirtualPayment({
-          ...payParams,
+        const requestParams = Object.assign({}, payParams, {
           success: (res) => {
             console.log('✅ 微信虚拟支付成功回调:', res);
             resolve({
@@ -104,6 +105,7 @@ class WxVirtualPaymentSDK {
             }
           }
         });
+        wx.requestVirtualPayment(requestParams);
       });
 
     } catch (error) {

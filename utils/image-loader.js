@@ -19,10 +19,7 @@ function createImageState(rawUrl, styleName = '', oldState = null, options = {})
   const maxRetry = typeof options.maxRetry === 'number' ? options.maxRetry : 3
 
   if (oldState && sameImage(oldState, normalizedRawUrl, styleName)) {
-    return {
-      ...oldState,
-      maxRetry
-    }
+    return Object.assign({}, oldState, { maxRetry })
   }
 
   return {
@@ -38,11 +35,10 @@ function createImageState(rawUrl, styleName = '', oldState = null, options = {})
 }
 
 function markImageLoaded(imageState = {}) {
-  return {
-    ...imageState,
+  return Object.assign({}, imageState, {
     loaded: true,
     error: false
-  }
+  })
 }
 
 function getRetryDelay(retryCount = 1) {
@@ -54,17 +50,15 @@ function getNextRetryState(imageState = {}) {
   const maxRetry = imageState.maxRetry || 3
 
   if (retryCount > maxRetry) {
-    return {
-      ...imageState,
+    return Object.assign({}, imageState, {
       loaded: true,
       error: true,
       retryCount: maxRetry
-    }
+    })
   }
 
   const useOriginal = retryCount === maxRetry
-  return {
-    ...imageState,
+  return Object.assign({}, imageState, {
     loaded: false,
     error: false,
     retryCount,
@@ -74,7 +68,7 @@ function getNextRetryState(imageState = {}) {
       retry: retryCount,
       useOriginal
     })
-  }
+  })
 }
 
 module.exports = {

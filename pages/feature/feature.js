@@ -191,7 +191,7 @@ Page({
       success: (res) => {
         const tempFiles = res.tempFiles.map(f => f.tempFilePath)
         this.setData({
-          images: [...this.data.images, ...tempFiles]
+          images: (this.data.images || []).concat(tempFiles)
         })
       }
     })
@@ -199,12 +199,13 @@ Page({
 
   deleteImage(e) {
     const index = e.currentTarget.dataset.index
-    const images = [...this.data.images]
+    const images = (this.data.images || []).slice()
     images.splice(index, 1)
     this.setData({ images })
   },
 
   async submitGenerate() {
+    if (this.data.isGenerating) return
     const feature = this.data.feature || {}
     report('generate_click', {
       feature_id: this.data.id,
@@ -216,6 +217,9 @@ Page({
       return wx.showToast({ title: '请上传图片', icon: 'none' })
     }
     
+    const hasEnoughPoints = await this.ensureEnoughPointsBeforeGenerate(feature)
+    if (!hasEnoughPoints) return
+
     this.setData({ isGenerating: true })
     
     try {
@@ -223,7 +227,8 @@ Page({
       wx.showLoading({ title: '上传图片中...' })
       const uploadTasks = this.data.images.map((filePath, index) => {
         // Use a simple random name, in a real app might need stronger ID
-        const cloudPath = `uploads/${Date.now()}_${Math.floor(Math.random()*1000)}${filePath.match(/\.[^.]+?$/)?.[0] || '.jpg'}`
+        const extMatch = filePath.match(/\.[^.]+?$/)
+        const cloudPath = `uploads/${Date.now()}_${Math.floor(Math.random()*1000)}${extMatch ? extMatch[0] : '.jpg'}`
         return wx.cloud.uploadFile({
           cloudPath,
           filePath,
@@ -252,6 +257,44 @@ Page({
       this.setData({ isGenerating: false })
       console.error(err)
       wx.showToast({ title: '上传失败', icon: 'none' })
+    }
+  },
+
+  async ensureEnoughPointsBeforeGenerate(feature) {
+    const pointsCost = Number(feature.points_cost || 0)
+    if (!pointsCost || pointsCost <= 0) return true
+
+    try {
+      wx.showLoading({ title: '校验星光中...' })
+      const res = await wx.cloud.callFunction({
+        name: 'points',
+        data: { action: 'getUserPoints' }
+      })
+      wx.hideLoading()
+
+      const currentPoints = Number(res.result && res.result.data && res.result.data.points || 0)
+      app.globalData.userPoints = currentPoints
+      wx.setStorageSync('userPoints', currentPoints)
+
+      if (currentPoints >= pointsCost) return true
+
+      wx.showModal({
+        title: '提示',
+        content: '您的星光已经不足，前往补充星光吧',
+        cancelText: '取消',
+        confirmText: '前往',
+        success: modalRes => {
+          if (modalRes.confirm) {
+            wx.navigateTo({ url: '/pages/points/points' })
+          }
+        }
+      })
+      return false
+    } catch (err) {
+      wx.hideLoading()
+      console.error('[Feature] 星光校验失败:', err)
+      wx.showToast({ title: '星光校验失败', icon: 'none' })
+      return false
     }
   },
 

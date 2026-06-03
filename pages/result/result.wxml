@@ -21,10 +21,11 @@
   </view>
 
   <view class="action-box">
-    <view class="reward-bubble" wx:if="{{!shareTask.completed}}">🌟{{shareTask.reward}}星光奖励</view>
+    <view class="reward-bubble" wx:if="{{!shareTask.completed && !isSharedResult}}">+{{shareTask.reward}}星光奖励</view>
     <view class="action-row">
       <button class="result-action-btn result-action-secondary" bindtap="saveImage" hover-class="btn-hover">保存原图</button>
-      <button class="result-action-btn result-action-primary" bindtap="openSharePanel" hover-class="btn-hover">分享给好友</button>
+      <button wx:if="{{isSharedResult}}" class="result-action-btn result-action-primary" bindtap="goGenerateSame" hover-class="btn-hover">生成同款图片</button>
+      <button wx:else class="result-action-btn result-action-primary" bindtap="openSharePanel" hover-class="btn-hover">分享给好友</button>
     </view>
   </view>
 
@@ -32,15 +33,15 @@
     <view class="share-panel" catchtap="noop">
       <view class="share-panel-title">分享图片</view>
       <button class="share-panel-item" open-type="share" bindtap="prepareFriendShare">
-        <text class="share-panel-icon">↗</text>
+        <text class="share-panel-icon">💬</text>
         <text class="share-panel-text">分享给好友</text>
       </button>
       <view class="share-panel-item" bindtap="shareToTimeline">
-        <text class="share-panel-icon">◎</text>
+        <text class="share-panel-icon">🌐</text>
         <text class="share-panel-text">分享到朋友圈</text>
       </view>
       <view class="share-panel-item {{isSavingPoster ? 'disabled' : ''}}" bindtap="sharePosterFromPanel">
-        <text class="share-panel-icon">▣</text>
+        <text class="share-panel-icon">🖼️</text>
         <text class="share-panel-text">生成分享海报</text>
       </view>
       <view class="share-panel-cancel" bindtap="closeSharePanel">取消</view>

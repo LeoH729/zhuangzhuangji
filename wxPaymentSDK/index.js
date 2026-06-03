@@ -106,8 +106,8 @@ class WxPaymentSDK {
           } else {
             resolve({
               success: false,
-              message: res.result?.message || '订单创建失败',
-              code: res.result?.code || 'CREATE_ORDER_FAILED'
+              message: (res.result && res.result.message) || '订单创建失败',
+              code: (res.result && res.result.code) || 'CREATE_ORDER_FAILED'
             });
           }
         },
@@ -144,8 +144,7 @@ class WxPaymentSDK {
     return new Promise((resolve) => {
       console.log('调起微信支付，参数:', payParams);
       
-      wx.requestPayment({
-        ...payParams,
+      const requestParams = Object.assign({}, payParams, {
         success: (res) => {
           console.log('微信支付成功:', res);
           resolve({
@@ -177,6 +176,7 @@ class WxPaymentSDK {
           }
         }
       });
+      wx.requestPayment(requestParams);
     });
   }
   
@@ -297,4 +297,4 @@ class WxPaymentSDK {
 }
 
 // 导出SDK
-module.exports = WxPaymentSDK; 
+module.exports = WxPaymentSDK;

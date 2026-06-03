@@ -110,10 +110,11 @@ function pruneCache(meta = getMeta(), extraBytes = 0) {
   const items = meta.items || {}
   let total = meta.totalSize || 0
   const entries = Object.keys(items)
-    .map(key => ({ key, ...items[key] }))
+    .map(key => Object.assign({ key }, items[key]))
     .sort((a, b) => (a.lastAccessAt || 0) - (b.lastAccessAt || 0))
 
-  for (const entry of entries) {
+  for (let i = 0; i < entries.length; i += 1) {
+    const entry = entries[i]
     if (total + extraBytes <= MAX_CACHE_BYTES) break
     removeCacheItem(meta, entry.key)
     total = meta.totalSize || 0
