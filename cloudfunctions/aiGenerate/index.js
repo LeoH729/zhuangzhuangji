@@ -1,6 +1,16 @@
 const cloud = require('wx-server-sdk')
 const { executeGeneration } = require('./generationExecutor')
-const { createTask, getTaskStatus, ensureWorker, listTasks } = require('./taskHelpers')
+const {
+  createTask,
+  getTaskStatus,
+  ensureWorker,
+  listTasks,
+  normalizeTemplateType,
+  normalizeInputFields,
+  normalizeInputValues,
+  compilePrompt,
+  TEXT_TO_IMAGE_PROVIDERS
+} = require('./taskHelpers')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
@@ -22,7 +32,7 @@ async function refundPoints(openid, amount, featureId) {
   })
 }
 
-async function runSyncGeneration(openid, featureId, imageUrls) {
+async function runSyncGeneration(openid, featureId, imageUrls, inputValues = {}) {
   const syncStartedAtMs = Date.now()
   let pointsDeducted = false
   let deductedAmount = 0
@@ -32,6 +42,22 @@ async function runSyncGeneration(openid, featureId, imageUrls) {
   try {
     const featureRes = await db.collection('ai_features').doc(featureId).get()
     const feature = featureRes.data
+    const templateType = normalizeTemplateType(feature && feature.template_type)
+    const inputFields = normalizeInputFields(feature && feature.input_fields)
+    const normalizedInputValues = normalizeInputValues(inputValues, inputFields)
+    const compiledPrompt = templateType === 'text_to_image'
+      ? compilePrompt(feature.prompt || '', inputFields, normalizedInputValues)
+      : (feature.prompt || '')
+    const normalizedImageUrls = Array.isArray(imageUrls) ? imageUrls.filter(Boolean) : []
+
+    if (templateType === 'text_to_image') {
+      for (let i = 0; i < inputFields.length; i += 1) {
+        const field = inputFields[i]
+        if (field.required && !normalizedInputValues[field.key]) {
+          return { success: false, error: `请填写${field.title || field.key}` }
+        }
+      }
+    }
 
     if (feature.points_cost > 0) {
       const deductRes = await cloud.callFunction({
@@ -65,8 +91,15 @@ async function runSyncGeneration(openid, featureId, imageUrls) {
     modelProvider = modelConfig.provider || ''
     modelCallId = modelConfig.model_call_id || feature.model_call_id || ''
 
+    if (templateType === 'text_to_image' && !TEXT_TO_IMAGE_PROVIDERS.includes(modelProvider)) {
+      throw new Error('当前模型不支持文生图，请联系管理员更换模型')
+    }
+
     const executeStartedAtMs = Date.now()
-    const execResult = await executeGeneration(cloud, modelConfig, feature, imageUrls, {
+    const execResult = await executeGeneration(cloud, modelConfig, {
+      ...feature,
+      prompt: compiledPrompt
+    }, normalizedImageUrls, {
       clientBusinessId: `sync_${Date.now()}`
     })
     const executionDurationMs = Date.now() - executeStartedAtMs
@@ -84,8 +117,11 @@ async function runSyncGeneration(openid, featureId, imageUrls) {
         generationMode: 'sync',
         provider: modelProvider,
         modelCallId,
-        photoUrl: imageUrls[0] || '',
-        originalImages: imageUrls,
+        photoUrl: normalizedImageUrls[0] || '',
+        originalImages: normalizedImageUrls,
+        inputValues: normalizedInputValues,
+        compiledPrompt,
+        templateType,
         resultUrl: resultImageUrl,
         pointsCost: feature.points_cost,
         executionDurationMs,
@@ -201,11 +237,11 @@ exports.main = async (event, context) => {
   const wxContext = cloud.getWXContext()
   const openid = wxContext.OPENID || event.userInfo?.openId
   const action = event.action || 'sync'
-  const { featureId, imageUrls, taskId, page, pageSize, historyId, rating } = event
+  const { featureId, imageUrls, inputValues, taskId, page, pageSize, historyId, rating } = event
 
   try {
     if (action === 'createTask') {
-      return await createTask(openid, featureId, imageUrls)
+      return await createTask(openid, featureId, imageUrls, inputValues)
     }
 
     if (action === 'getTaskStatus') {
@@ -224,7 +260,7 @@ exports.main = async (event, context) => {
       return await listTasks(openid, page, pageSize)
     }
 
-    return await runSyncGeneration(openid, featureId, imageUrls)
+    return await runSyncGeneration(openid, featureId, imageUrls, inputValues)
   } catch (err) {
     console.error('[aiGenerate]', err)
     return { success: false, error: err.message || '生成失败' }

@@ -15,7 +15,7 @@ App({
     userInfo: null,
     openid: null,
     userPoints: 0,
-    version: '1.4.0',
+    version: '1.4.1',
     pointsConfig: {
       name: '妆妆蛋',
       initial_points: 100,

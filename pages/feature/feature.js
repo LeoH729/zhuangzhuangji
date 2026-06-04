@@ -22,6 +22,10 @@ Page({
     id: '',
     feature: null,
     images: [],
+    inputFields: [],
+    inputValues: {},
+    isTextToImage: false,
+    canSubmit: false,
     isGenerating: false,
     bannerImage: createImageState('', IMAGE_STYLES.DETAIL_BANNER)
   },
@@ -134,8 +138,18 @@ Page({
 
   applyFeature(feature) {
     const oldBanner = this.data.bannerImage
+    const templateType = feature.template_type === 'text_to_image' ? 'text_to_image' : 'image_to_image'
+    const inputFields = this.normalizeInputFields(feature.input_fields)
+    const inputValues = {}
+    inputFields.forEach(field => {
+      inputValues[field.key] = ''
+    })
     this.setData({
       feature,
+      inputFields,
+      inputValues,
+      isTextToImage: templateType === 'text_to_image',
+      canSubmit: templateType === 'text_to_image' ? this.canSubmitTextForm(inputFields, inputValues) : this.data.images.length > 0,
       bannerImage: createImageState(
         feature.detail_banner,
         IMAGE_STYLES.DETAIL_BANNER,
@@ -143,6 +157,62 @@ Page({
       )
     })
     this.reportFeatureDetailView(feature)
+  },
+
+  normalizeInputFields(fields) {
+    if (!Array.isArray(fields)) return []
+    return fields
+      .map((field, index) => {
+        const key = String(field && field.key || '').trim()
+        const title = String(field && (field.title || field.label) || '').trim()
+        const placeholder = String(field && field.placeholder || '').trim() || `请输入${title || key}`
+        return {
+          key,
+          title,
+          placeholder,
+          value: '',
+          maxLength: Number(field && (field.maxLength || field.max_length || field.limit)) || 0,
+          required: field && field.required !== false,
+          sort: Number(field && field.sort) || index
+        }
+      })
+      .filter(field => field.key)
+      .sort((a, b) => a.sort - b.sort)
+  },
+
+  canSubmitTextForm(inputFields, inputValues) {
+    const fields = inputFields || this.data.inputFields || []
+    const values = inputValues || this.data.inputValues || {}
+    if (fields.length === 0) return false
+    return fields.every(field => !field.required || String(values[field.key] || '').trim())
+  },
+
+  updateCanSubmit(nextData = {}) {
+    const isTextToImage = Object.prototype.hasOwnProperty.call(nextData, 'isTextToImage') ? nextData.isTextToImage : this.data.isTextToImage
+    const images = nextData.images || this.data.images || []
+    const inputFields = nextData.inputFields || this.data.inputFields || []
+    const inputValues = nextData.inputValues || this.data.inputValues || {}
+    return isTextToImage ? this.canSubmitTextForm(inputFields, inputValues) : images.length > 0
+  },
+
+  onInputFieldChange(e) {
+    const key = e.currentTarget.dataset.key
+    const index = Number(e.currentTarget.dataset.index)
+    const maxLength = Number(e.currentTarget.dataset.maxLength || 0)
+    let value = e.detail && e.detail.value ? e.detail.value : ''
+    if (maxLength > 0 && value.length > maxLength) {
+      value = value.slice(0, maxLength)
+    }
+    const inputValues = { ...(this.data.inputValues || {}), [key]: value }
+    const inputFields = (this.data.inputFields || []).slice()
+    if (inputFields[index]) {
+      inputFields[index] = { ...inputFields[index], value }
+    }
+    this.setData({
+      inputFields,
+      inputValues,
+      canSubmit: this.updateCanSubmit({ inputFields, inputValues })
+    })
   },
 
   reportFeatureDetailView(feature) {
@@ -190,8 +260,10 @@ Page({
       sourceType: ['album', 'camera'],
       success: (res) => {
         const tempFiles = res.tempFiles.map(f => f.tempFilePath)
+        const images = (this.data.images || []).concat(tempFiles)
         this.setData({
-          images: (this.data.images || []).concat(tempFiles)
+          images,
+          canSubmit: this.updateCanSubmit({ images })
         })
       }
     })
@@ -201,7 +273,32 @@ Page({
     const index = e.currentTarget.dataset.index
     const images = (this.data.images || []).slice()
     images.splice(index, 1)
-    this.setData({ images })
+    this.setData({
+      images,
+      canSubmit: this.updateCanSubmit({ images })
+    })
+  },
+
+  validateTextInputs() {
+    const fields = this.data.inputFields || []
+    const values = this.data.inputValues || {}
+    if (fields.length === 0) {
+      wx.showToast({ title: '模板字段未配置', icon: 'none' })
+      return false
+    }
+    for (let i = 0; i < fields.length; i += 1) {
+      const field = fields[i]
+      const value = String(values[field.key] || '').trim()
+      if (field.required && !value) {
+        wx.showToast({ title: `请填写${field.title || field.key}`, icon: 'none' })
+        return false
+      }
+      if (field.maxLength > 0 && value.length > field.maxLength) {
+        wx.showToast({ title: `${field.title || field.key}超出字数限制`, icon: 'none' })
+        return false
+      }
+    }
+    return true
   },
 
   async submitGenerate() {
@@ -211,9 +308,12 @@ Page({
       feature_id: this.data.id,
       feature_name: feature.name || '',
       feature_group: feature.group || '',
-      image_count: this.data.images.length
+      image_count: this.data.images.length,
+      template_type: this.data.isTextToImage ? 'text_to_image' : 'image_to_image'
     })
-    if (this.data.images.length === 0) {
+    if (this.data.isTextToImage) {
+      if (!this.validateTextInputs()) return
+    } else if (this.data.images.length === 0) {
       return wx.showToast({ title: '请上传图片', icon: 'none' })
     }
     
@@ -223,9 +323,13 @@ Page({
     this.setData({ isGenerating: true })
     
     try {
-      // 1. Upload images to cloud storage
-      wx.showLoading({ title: '上传图片中...' })
-      const uploadTasks = this.data.images.map((filePath, index) => {
+      const fileIDs = []
+      if (!this.data.isTextToImage) {
+        wx.showLoading({ title: '上传图片中...' })
+      } else {
+        wx.showLoading({ title: '提交任务中...' })
+      }
+      const uploadTasks = this.data.isTextToImage ? [] : this.data.images.map((filePath, index) => {
         // Use a simple random name, in a real app might need stronger ID
         const extMatch = filePath.match(/\.[^.]+?$/)
         const cloudPath = `uploads/${Date.now()}_${Math.floor(Math.random()*1000)}${extMatch ? extMatch[0] : '.jpg'}`
@@ -235,12 +339,15 @@ Page({
         }).then(res => res.fileID)
       })
       
-      const fileIDs = await Promise.all(uploadTasks)
+      if (uploadTasks.length > 0) {
+        fileIDs.push(...await Promise.all(uploadTasks))
+      }
       report('generation_submit', {
         feature_id: this.data.id,
         feature_name: feature.name || '',
         feature_group: feature.group || '',
-        image_count: fileIDs.length
+        image_count: fileIDs.length,
+        template_type: this.data.isTextToImage ? 'text_to_image' : 'image_to_image'
       })
       
       // 2. Go to generating page (analyzing)
@@ -248,8 +355,9 @@ Page({
       this.setData({ isGenerating: false })
       
       const encodedFileIDs = encodeURIComponent(JSON.stringify(fileIDs))
+      const encodedInputValues = encodeURIComponent(JSON.stringify(this.data.inputValues || {}))
       wx.navigateTo({
-        url: `/pages/analyzing/analyzing?featureId=${this.data.id}&images=${encodedFileIDs}`
+        url: `/pages/analyzing/analyzing?featureId=${this.data.id}&images=${encodedFileIDs}&inputValues=${encodedInputValues}`
       })
       
     } catch (err) {

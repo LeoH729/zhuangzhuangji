@@ -7,10 +7,7 @@ const _ = db.command
 
 // 格式化时间为 YYYY-MM-DD HH:mm:ss（北京时间）
 function formatDateTime(date = new Date()) {
-  const localTime = date.getTime() + 8 * 60 * 60 * 1000;
-  const d = new Date(localTime);
-  const pad = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  return db.serverDate()
 }
 
 // 集合与文档ID

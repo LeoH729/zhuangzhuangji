@@ -27,7 +27,7 @@
     </view>
   </view>
 
-  <view class="upload-section">
+  <view wx:if="{{!isTextToImage}}" class="upload-section">
     <view class="section-title">上传照片</view>
     <view class="section-desc">请上传清晰的照片以获得更好的生成效果</view>
     
@@ -44,8 +44,31 @@
     </view>
   </view>
 
+  <view wx:else class="text-input-section">
+    <view class="section-title">填写生成信息</view>
+    <view class="section-desc">请按模板要求填写文案，AI 会自动生成图片</view>
+    <view class="dynamic-field" wx:for="{{inputFields}}" wx:key="key">
+      <view class="field-label">
+        <text>{{item.title || item.key}}</text>
+        <text wx:if="{{item.required}}" class="required-mark">*</text>
+        <text wx:if="{{item.maxLength > 0}}" class="field-limit">{{item.value.length}}/{{item.maxLength}}</text>
+      </view>
+      <textarea
+        class="dynamic-textarea"
+        auto-height
+        value="{{item.value}}"
+        placeholder="{{item.placeholder}}"
+        maxlength="{{item.maxLength > 0 ? item.maxLength : 200}}"
+        data-key="{{item.key}}"
+        data-index="{{index}}"
+        data-max-length="{{item.maxLength}}"
+        bindinput="onInputFieldChange"
+      ></textarea>
+    </view>
+  </view>
+
   <view class="bottom-action">
-    <button class="btn-primary {{images.length === 0 ? 'btn-disabled' : ''}}" bindtap="submitGenerate" hover-class="btn-hover" disabled="{{images.length === 0 || isGenerating}}">
+    <button class="btn-primary {{!canSubmit ? 'btn-disabled' : ''}}" bindtap="submitGenerate" hover-class="btn-hover" disabled="{{!canSubmit || isGenerating}}">
       {{isGenerating ? '处理中...' : '立即生成'}}
     </button>
     <view class="action-tips">将使用AI生图技术生成</view>

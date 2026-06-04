@@ -174,7 +174,7 @@ async function processTask(taskId) {
 
     const featureSnapshot = {
       name: task.featureNameSnapshot || '',
-      prompt: task.promptSnapshot || '',
+      prompt: task.compiledPrompt || task.promptSnapshot || '',
       points_cost: task.pointsCost || 0
     }
 
@@ -236,6 +236,9 @@ async function processTask(taskId) {
         modelCallId,
         photoUrl: (task.imageUrls && task.imageUrls[0]) || '',
         originalImages: task.imageUrls || [],
+        inputValues: task.inputValues || {},
+        compiledPrompt: task.compiledPrompt || task.promptSnapshot || '',
+        templateType: task.templateType || 'image_to_image',
         resultUrl: resultImageUrl,
         pointsCost: task.pointsCost || 0,
         taskId: task._id,
@@ -261,6 +264,9 @@ async function processTask(taskId) {
         executionDurationMs,
         workerDurationMs,
         totalDurationMs,
+        inputValues: task.inputValues || {},
+        compiledPrompt: task.compiledPrompt || task.promptSnapshot || '',
+        templateType: task.templateType || 'image_to_image',
         finishedAt: db.serverDate()
       }
     })

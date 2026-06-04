@@ -11,6 +11,7 @@ Page({
   data: {
     featureId: '',
     images: [],
+    inputValues: {},
     progress: 5,
     progressText: '5',
     elapsedText: '00:00',
@@ -27,10 +28,13 @@ Page({
 
   onLoad(options) {
     this.initSnakeGame()
-    if (options.featureId && options.images) {
+    if (options.featureId) {
+      const images = options.images ? JSON.parse(decodeURIComponent(options.images)) : []
+      const inputValues = options.inputValues ? JSON.parse(decodeURIComponent(options.inputValues)) : {}
       this.setData({
         featureId: options.featureId,
-        images: JSON.parse(decodeURIComponent(options.images))
+        images,
+        inputValues
       })
       this.pollStartedAt = Date.now()
       this.lastEnsureWorkerAt = 0
@@ -284,7 +288,8 @@ Page({
         data: {
           action: 'createTask',
           featureId: this.data.featureId,
-          imageUrls: this.data.images
+          imageUrls: this.data.images,
+          inputValues: this.data.inputValues
         }
       })
 
