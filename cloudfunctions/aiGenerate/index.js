@@ -1,5 +1,5 @@
 const cloud = require('wx-server-sdk')
-const { executeGeneration } = require('./generationExecutor')
+const { executeGenerationWithFallback } = require('./generationExecutor')
 const {
   createTask,
   getTaskStatus,
@@ -95,8 +95,23 @@ async function runSyncGeneration(openid, featureId, imageUrls, inputValues = {})
       throw new Error('当前模型不支持文生图，请联系管理员更换模型')
     }
 
+    const fallbackModelCallId = feature.fallback_model_call_id || ''
+    let fallbackModelConfig = null
+    if (fallbackModelCallId) {
+      const fallbackModelRes = await db.collection('ai_models').where({
+        model_call_id: fallbackModelCallId
+      }).get()
+      fallbackModelConfig = fallbackModelRes.data[0]
+      if (!fallbackModelConfig) {
+        throw new Error('fallback model config not found')
+      }
+      if (templateType === 'text_to_image' && !TEXT_TO_IMAGE_PROVIDERS.includes(fallbackModelConfig.provider)) {
+        throw new Error('fallback model is not compatible with text-to-image')
+      }
+    }
+
     const executeStartedAtMs = Date.now()
-    const execResult = await executeGeneration(cloud, modelConfig, {
+    const execResult = await executeGenerationWithFallback(cloud, modelConfig, fallbackModelConfig, {
       ...feature,
       prompt: compiledPrompt
     }, normalizedImageUrls, {
@@ -107,6 +122,8 @@ async function runSyncGeneration(openid, featureId, imageUrls, inputValues = {})
       throw new Error('当前模型通道为异步返回，请使用异步任务生成流程')
     }
     const resultImageUrl = execResult.resultImageUrl
+    modelProvider = execResult.provider || modelProvider
+    modelCallId = execResult.modelCallId || modelCallId
     const totalDurationMs = Date.now() - syncStartedAtMs
 
     const historyRes = await db.collection('generation_history').add({
@@ -117,6 +134,9 @@ async function runSyncGeneration(openid, featureId, imageUrls, inputValues = {})
         generationMode: 'sync',
         provider: modelProvider,
         modelCallId,
+        fallbackModelCallId,
+        fallbackUsed: !!execResult.fallbackUsed,
+        primaryErrorMessage: execResult.primaryErrorMessage || '',
         photoUrl: normalizedImageUrls[0] || '',
         originalImages: normalizedImageUrls,
         inputValues: normalizedInputValues,

@@ -26,7 +26,10 @@
             </view>
           </view>
 
-          <text class="date-time">{{item.date}}</text>
+          <view class="task-meta">
+            <text class="date-time">{{item.date}}</text>
+            <text class="duration-time">耗时：{{item.durationText}}</text>
+          </view>
 
           <view wx:if="{{item.status === 'failed' && item.errorMessage}}" class="error-wrapper">
             <text class="error-label">失败原因：</text>

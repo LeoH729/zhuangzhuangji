@@ -107,6 +107,20 @@ Page({
     this.loadTasks(false);
   },
 
+  formatDuration(durationMs) {
+    const ms = Number(durationMs) || 0;
+    if (ms <= 0) return '-';
+    if (ms < 1000) return '<1秒';
+    const totalSeconds = Math.round(ms / 1000);
+    if (totalSeconds < 60) return `${totalSeconds}秒`;
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    if (minutes < 60) return `${minutes}分${String(seconds).padStart(2, '0')}秒`;
+    const hours = Math.floor(minutes / 60);
+    const restMinutes = minutes % 60;
+    return `${hours}时${String(restMinutes).padStart(2, '0')}分`;
+  },
+
   formatTask(item) {
     let dateStr = '';
     const timeVal = item.createdAt || item.createTime;
@@ -126,6 +140,8 @@ Page({
       featureName: item.featureNameSnapshot || item.featureName || 'AI生成任务',
       date: dateStr,
       status: item.status || 'pending',
+      totalDurationMs: Number(item.totalDurationMs) || 0,
+      durationText: this.formatDuration(item.totalDurationMs),
       rawResultUrl: resultUrl,
       image: createImageState(resultUrl, IMAGE_STYLES.TASK_THUMB),
       errorMessage: item.errorMessage || '',
@@ -247,7 +263,8 @@ Page({
             fresh.status !== existingItem.status ||
             fresh.historyId !== existingItem.historyId ||
             fresh.rawResultUrl !== existingItem.rawResultUrl ||
-            fresh.errorMessage !== existingItem.errorMessage
+            fresh.errorMessage !== existingItem.errorMessage ||
+            fresh.durationText !== existingItem.durationText
           );
 
         if (hasTaskChanged) {
@@ -261,6 +278,8 @@ Page({
             status: fresh.status,
             rawResultUrl: fresh.rawResultUrl,
             historyId: fresh.historyId,
+            totalDurationMs: fresh.totalDurationMs,
+            durationText: fresh.durationText,
             image,
             errorMessage: fresh.errorMessage,
             imageError: false

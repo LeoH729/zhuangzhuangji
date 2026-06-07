@@ -164,7 +164,7 @@ Page({
   },
 
   showAbout() {
-    const version = (app.globalData && app.globalData.version) || '1.4.0'
+    const version = (app.globalData && app.globalData.version) || '1.4.1.1'
     wx.showModal({
       title: '关于我们',
       content: `作者：厦门超级独奏\n版本号：${version}`,

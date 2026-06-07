@@ -143,10 +143,21 @@
   color: #C62828;
 }
 
+.task-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+  margin-bottom: auto;
+}
+
 .date-time {
   font-size: 24rpx;
   color: #8E8E93;
-  margin-bottom: auto;
+}
+
+.duration-time {
+  font-size: 24rpx;
+  color: #5F6368;
 }
 
 .error-wrapper {

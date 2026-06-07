@@ -57,6 +57,24 @@ function compilePrompt(prompt = '', fields = [], inputValues = {}) {
   return compiled
 }
 
+function toTimestamp(value) {
+  if (!value) return 0
+  const time = new Date(value).getTime()
+  return Number.isFinite(time) ? time : 0
+}
+
+function getTaskTotalDurationMs(task) {
+  if (!task) return 0
+  if (Number(task.totalDurationMs) > 0) {
+    return Number(task.totalDurationMs)
+  }
+  const createdAtMs = toTimestamp(task.createdAt)
+  if (!createdAtMs) return 0
+  const finishedAtMs = toTimestamp(task.finishedAt)
+  const endAtMs = finishedAtMs || Date.now()
+  return Math.max(0, endAtMs - createdAtMs)
+}
+
 async function refundFeaturePoints(openid, amount, featureId) {
   if (!amount || amount <= 0) return
   await cloud.callFunction({
@@ -89,7 +107,8 @@ function buildTaskResponse(task) {
     compiledPrompt: task.compiledPrompt || task.promptSnapshot || '',
     createdAt: task.createdAt || null,
     startedAt: task.startedAt || null,
-    finishedAt: task.finishedAt || null
+    finishedAt: task.finishedAt || null,
+    totalDurationMs: getTaskTotalDurationMs(task)
   }
 }
 
@@ -175,6 +194,27 @@ async function createTask(openid, featureId, imageUrls, inputValues = {}) {
     return { success: false, error: '当前模型不支持文生图，请联系管理员更换模型' }
   }
 
+  const fallbackModelCallId = feature.fallback_model_call_id || ''
+  let fallbackModelConfig = null
+  if (fallbackModelCallId) {
+    const fallbackModelRes = await db.collection('ai_models').where({
+      model_call_id: fallbackModelCallId
+    }).get()
+    fallbackModelConfig = fallbackModelRes.data[0]
+    if (!fallbackModelConfig) {
+      if (pointsDeducted && pointsCost > 0) {
+        await refundFeaturePoints(openid, pointsCost, featureId)
+      }
+      return { success: false, error: 'fallback model config not found' }
+    }
+    if (templateType === TEMPLATE_TYPE_TEXT && !TEXT_TO_IMAGE_PROVIDERS.includes(fallbackModelConfig.provider)) {
+      if (pointsDeducted && pointsCost > 0) {
+        await refundFeaturePoints(openid, pointsCost, featureId)
+      }
+      return { success: false, error: 'fallback model is not compatible with text-to-image' }
+    }
+  }
+
   const taskRes = await db.collection(TASKS_COLLECTION).add({
     data: {
       _openid: openid,
@@ -187,6 +227,10 @@ async function createTask(openid, featureId, imageUrls, inputValues = {}) {
       inputFields,
       templateType,
       modelCallIdSnapshot: feature.model_call_id || '',
+      fallbackModelCallIdSnapshot: fallbackModelCallId,
+      activeModelRole: 'primary',
+      fallbackUsed: false,
+      fallbackErrorMessage: '',
       featureNameSnapshot: feature.name || '',
       pointsCost,
       pointsDeducted,
@@ -321,7 +365,8 @@ async function listTasks(openid, page = 0, pageSize = 10) {
         compiledPrompt: item.compiledPrompt || item.promptSnapshot || '',
         resultUrl: item.resultUrl || '',
         errorMessage: item.errorMessage || '',
-        historyId: item.historyId || ''
+        historyId: item.historyId || '',
+        totalDurationMs: getTaskTotalDurationMs(item)
       }
     })
 

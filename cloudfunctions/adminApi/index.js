@@ -55,6 +55,7 @@ const FEATURE_FIELDS = [
   'hang_count',
   'la_count',
   'model_call_id',
+  'fallback_model_call_id',
   'prompt',
   'template_type',
   'input_fields',

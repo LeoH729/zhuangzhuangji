@@ -67,6 +67,7 @@ const EMPTY_FEATURE = {
   hang_count: 0,
   la_count: 0,
   model_call_id: '',
+  fallback_model_call_id: '',
   prompt: '',
   status: 1,
   sort: 10,
@@ -674,7 +675,9 @@ function FeaturesPanel() {
   const [form, setForm] = useState(EMPTY_FEATURE)
   const [editingId, setEditingId] = useState('')
   const selectedModel = getSelectedModel(refs.models || [], form.model_call_id)
+  const selectedFallbackModel = getSelectedModel(refs.models || [], form.fallback_model_call_id)
   const textProviderCompatible = !selectedModel || TEXT_TO_IMAGE_PROVIDERS.includes(selectedModel.provider)
+  const fallbackTextProviderCompatible = !selectedFallbackModel || TEXT_TO_IMAGE_PROVIDERS.includes(selectedFallbackModel.provider)
 
   const save = async () => {
     const payload = normalizeFeatureForm(form)
@@ -738,7 +741,11 @@ function FeaturesPanel() {
         <Field label="名称"><TextInput value={form.name} onChange={(value) => setForm({ ...form, name: value })} /></Field>
         <Field label="分组"><Select value={form.group} onChange={(value) => setForm({ ...form, group: value })} options={(refs.groups || []).map((item) => item.name)} /></Field>
         <Field label="模型"><Select value={form.model_call_id} onChange={(value) => setForm({ ...form, model_call_id: value })} options={(refs.models || []).map((item) => item.model_call_id)} /></Field>
+        <Field label="兜底模型"><Select value={form.fallback_model_call_id} onChange={(value) => setForm({ ...form, fallback_model_call_id: value })} options={(refs.models || []).map((item) => item.model_call_id)} /></Field>
         <Field label="模板类型"><Select value={form.template_type} onChange={updateTemplateType} options={['image_to_image', 'text_to_image']} labels={TEMPLATE_TYPE_LABELS} /></Field>
+        {form.template_type === 'text_to_image' && selectedFallbackModel && !fallbackTextProviderCompatible ? (
+          <div className="form-notice warning">Fallback provider {selectedFallbackModel.provider} is not compatible with text-to-image. Use volcengine, supersolo, supersolo_async, or toapis.</div>
+        ) : null}
         {form.template_type === 'text_to_image' && selectedModel && !textProviderCompatible ? (
           <div className="form-notice warning">当前模型 provider 为 {selectedModel.provider}，不兼容文生图。请切换为 volcengine、supersolo、supersolo_async 或 toapis。</div>
         ) : null}
@@ -793,6 +800,7 @@ function FeaturesPanel() {
           <SortableTh field="name" sort={sort} onSort={toggleSort}>名称</SortableTh>
           <SortableTh field="group" sort={sort} onSort={toggleSort}>分组</SortableTh>
           <SortableTh field="model_call_id" sort={sort} onSort={toggleSort}>模型</SortableTh>
+          <th>Fallback</th>
           <SortableTh field="points_cost" sort={sort} onSort={toggleSort}>消耗</SortableTh>
           <SortableTh field="hang_count" sort={sort} onSort={toggleSort}>夯</SortableTh>
           <SortableTh field="la_count" sort={sort} onSort={toggleSort}>拉</SortableTh>
@@ -803,7 +811,7 @@ function FeaturesPanel() {
         </tr></thead>
         <tbody>{items.map((item) => (
           <tr key={item._id}>
-            <td>{item.name}</td><td>{item.group}</td><td>{item.model_call_id}</td><td>{item.points_cost}</td><td>{item.hang_count || 0}</td><td>{item.la_count || 0}</td><td>{item.status}</td><td>{item.sort}</td><td>{formatDate(item.createdAt)}</td>
+            <td>{item.name}</td><td>{item.group}</td><td>{item.model_call_id}</td><td>{item.fallback_model_call_id || '-'}</td><td>{item.points_cost}</td><td>{item.hang_count || 0}</td><td>{item.la_count || 0}</td><td>{item.status}</td><td>{item.sort}</td><td>{formatDate(item.createdAt)}</td>
             <td className="row-actions"><button onClick={() => edit(item)}>编辑</button><IconButton title="删除" onClick={() => remove(item._id)}><Trash2 size={16} /></IconButton></td>
           </tr>
         ))}</tbody>

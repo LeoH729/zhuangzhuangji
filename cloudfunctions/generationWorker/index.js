@@ -1,5 +1,5 @@
 const cloud = require('wx-server-sdk')
-const { executeGeneration } = require('./generationExecutor')
+const { executeGenerationWithFallback } = require('./generationExecutor')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
@@ -17,6 +17,13 @@ function elapsedSince(value, fallbackMs = Date.now()) {
 
 function isUpstreamAsyncProvider(provider = '') {
   return provider === 'toapis' || provider === 'supersolo_async'
+}
+
+function getActiveModelCallId(task = {}) {
+  if (task.activeModelRole === 'fallback' && task.fallbackModelCallIdSnapshot) {
+    return task.fallbackModelCallIdSnapshot
+  }
+  return task.modelCallIdSnapshot
 }
 
 function normalizeWorkerError(err) {
@@ -125,7 +132,7 @@ async function processTask(taskId) {
 
     // 获取该任务的模型配置信息，判断通道类型
     const modelRes = await db.collection('ai_models').where({
-      model_call_id: task.modelCallIdSnapshot
+      model_call_id: getActiveModelCallId(task)
     }).get()
     const modelConfig = modelRes.data[0]
     const isAsyncProvider = modelConfig && isUpstreamAsyncProvider(modelConfig.provider)
@@ -172,6 +179,14 @@ async function processTask(taskId) {
     modelProvider = modelConfig.provider || ''
     modelCallId = modelConfig.model_call_id || task.modelCallIdSnapshot || ''
 
+    let fallbackModelConfig = null
+    if (task.fallbackModelCallIdSnapshot) {
+      const fallbackModelRes = await db.collection('ai_models').where({
+        model_call_id: task.fallbackModelCallIdSnapshot
+      }).get()
+      fallbackModelConfig = fallbackModelRes.data[0] || null
+    }
+
     const featureSnapshot = {
       name: task.featureNameSnapshot || '',
       prompt: task.compiledPrompt || task.promptSnapshot || '',
@@ -179,17 +194,23 @@ async function processTask(taskId) {
     }
 
     const executeStartedAtMs = Date.now()
-    const execResult = await executeGeneration(
+    const execResult = await executeGenerationWithFallback(
       cloud,
       modelConfig,
+      fallbackModelConfig,
       featureSnapshot,
       task.imageUrls || [],
       {
         upstreamTaskId: task.upstreamTaskId || '',
+        activeModelRole: task.activeModelRole || 'primary',
         clientBusinessId: task._id
       }
     )
     const executionDurationMs = Date.now() - executeStartedAtMs
+    if (execResult) {
+      modelProvider = execResult.provider || modelProvider
+      modelCallId = execResult.modelCallId || modelCallId
+    }
 
     if (!execResult || execResult.status === 'pending') {
       await db.collection(TASKS_COLLECTION).doc(task._id).update({
@@ -201,6 +222,10 @@ async function processTask(taskId) {
           lastExecutionDurationMs: executionDurationMs,
           provider: modelProvider,
           modelCallId,
+          activeModelRole: (execResult && execResult.activeModelRole) || task.activeModelRole || 'primary',
+          fallbackUsed: !!(execResult && execResult.fallbackUsed),
+          primaryErrorMessage: (execResult && execResult.primaryErrorMessage) || task.primaryErrorMessage || '',
+          fallbackErrorMessage: '',
           errorMessage: ''
         }
       })
@@ -234,6 +259,9 @@ async function processTask(taskId) {
         generationMode: 'worker',
         provider: modelProvider,
         modelCallId,
+        fallbackModelCallId: task.fallbackModelCallIdSnapshot || '',
+        fallbackUsed: !!execResult.fallbackUsed,
+        primaryErrorMessage: execResult.primaryErrorMessage || task.primaryErrorMessage || '',
         photoUrl: (task.imageUrls && task.imageUrls[0]) || '',
         originalImages: task.imageUrls || [],
         inputValues: task.inputValues || {},
@@ -264,6 +292,10 @@ async function processTask(taskId) {
         executionDurationMs,
         workerDurationMs,
         totalDurationMs,
+        activeModelRole: execResult.activeModelRole || task.activeModelRole || 'primary',
+        fallbackUsed: !!execResult.fallbackUsed,
+        primaryErrorMessage: execResult.primaryErrorMessage || task.primaryErrorMessage || '',
+        fallbackErrorMessage: '',
         inputValues: task.inputValues || {},
         compiledPrompt: task.compiledPrompt || task.promptSnapshot || '',
         templateType: task.templateType || 'image_to_image',
@@ -302,6 +334,10 @@ async function processTask(taskId) {
     const failureMetrics = {
       provider: modelProvider,
       modelCallId,
+      activeModelRole: err.primaryErrorMessage ? 'fallback' : (task.activeModelRole || 'primary'),
+      fallbackUsed: !!task.fallbackUsed || !!err.primaryErrorMessage,
+      primaryErrorMessage: err.primaryErrorMessage || task.primaryErrorMessage || '',
+      fallbackErrorMessage: err.fallbackErrorMessage || '',
       workerDurationMs: elapsedSince(task.startedAt, failedAtMs) || (failedAtMs - processStartedAtMs),
       totalDurationMs: elapsedSince(task.createdAt, failedAtMs)
     }

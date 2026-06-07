@@ -45,7 +45,10 @@ loadModule('cloudfunctions/generationWorker/generationExecutor.js')
 
 const aiGenerateSource = fs.readFileSync(path.join(root, 'cloudfunctions/aiGenerate/index.js'), 'utf8')
 const workerSource = fs.readFileSync(path.join(root, 'cloudfunctions/generationWorker/index.js'), 'utf8')
+const workerExecutorSource = fs.readFileSync(path.join(root, 'cloudfunctions/generationWorker/generationExecutor.js'), 'utf8')
 const analyzingSource = fs.readFileSync(path.join(root, 'pages/analyzing/analyzing.js'), 'utf8')
+const taskHelpersSource = fs.readFileSync(path.join(root, 'cloudfunctions/aiGenerate/taskHelpers.js'), 'utf8')
+const historySource = fs.readFileSync(path.join(root, 'pages/generation-history/generation-history.js'), 'utf8')
 
 const checks = [
   ['aiGenerate createTask action', aiGenerateSource.includes("action === 'createTask'")],
@@ -53,8 +56,11 @@ const checks = [
   ['worker CAS pending->running', workerSource.includes("status: 'pending'") && workerSource.includes("status: 'running'")],
   ['worker openid auth', workerSource.includes('task._openid !== openid')],
   ['worker idempotent refund', workerSource.includes('pointsRefunded')],
+  ['fallback executor helper', workerExecutorSource.includes('executeGenerationWithFallback')],
+  ['fallback task snapshot', taskHelpersSource.includes('fallbackModelCallIdSnapshot') && taskHelpersSource.includes('fallbackUsed')],
+  ['task duration list field', taskHelpersSource.includes('totalDurationMs') && historySource.includes('formatDuration')],
   ['analyzing polling', analyzingSource.includes('getTaskStatus') && analyzingSource.includes('createTask')],
-  ['analyzing worker trigger', analyzingSource.includes('generationWorker')]
+  ['task helper worker trigger', taskHelpersSource.includes("name: 'generationWorker'")]
 ]
 
 for (const [name, ok] of checks) {

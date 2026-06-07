@@ -24,6 +24,10 @@
     "imageUrls": ["cloud://env-id/uploads/example.jpg"],
     "promptSnapshot": "将上传的人像转换成元气日系风格",
     "modelCallIdSnapshot": "supersolo_gpt_image_2",
+    "fallbackModelCallIdSnapshot": "toapis_gpt_image_2",
+    "activeModelRole": "primary",
+    "fallbackUsed": false,
+    "fallbackErrorMessage": "",
     "featureNameSnapshot": "元气日系写真",
     "pointsCost": 5,
     "pointsDeducted": true,
@@ -33,7 +37,8 @@
     "historyId": "",
     "createdAt": "2026-05-20T08:00:00.000Z",
     "startedAt": null,
-    "finishedAt": null
+    "finishedAt": null,
+    "totalDurationMs": 0
   },
   "statusValues": ["pending", "running", "succeeded", "failed"]
 }

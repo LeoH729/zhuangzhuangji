@@ -18,6 +18,13 @@ function normalizeBaseUrl(baseUrl = '') {
   return String(baseUrl || '').replace(/\/+$/, '')
 }
 
+function resolveImageSize(modelConfig = {}, fallback = '1024x1024') {
+  if (String(modelConfig.model_id || '').trim() === 'gpt-image-2') {
+    return 'auto'
+  }
+  return modelConfig.size || fallback
+}
+
 function guessImageExtension(contentType = '', url = '') {
   const lowerType = String(contentType).toLowerCase()
   if (lowerType.includes('webp')) return 'webp'
@@ -196,7 +203,7 @@ async function callSupersolo(cloud, modelConfig, feature, imageUrls) {
     model: modelConfig.model_id,
     prompt: feature.prompt || '',
     n: 1,
-    size: '1024x1024',
+    size: resolveImageSize(modelConfig, '1024x1024'),
     response_format: 'b64_json'
   }
 
@@ -241,7 +248,7 @@ async function callJiucan(cloud, modelConfig, feature, imageUrls) {
   form.append('model', modelConfig.model_id)
   form.append('prompt', feature.prompt || '')
   form.append('n', String(modelConfig.n || 1))
-  form.append('size', modelConfig.size || '1024x1024')
+  form.append('size', resolveImageSize(modelConfig, '1024x1024'))
   form.append('response_format', modelConfig.response_format || 'b64_json')
   form.append('image', imageFile.buffer, {
     filename: `reference.${imageFile.extension}`,
@@ -317,7 +324,7 @@ async function createToapisTask(cloud, modelConfig, feature, imageUrls, options 
     model: modelConfig.model_id,
     prompt: feature.prompt || '',
     n: 1,
-    size: modelConfig.size || '1:1'
+    size: resolveImageSize(modelConfig, '1:1')
   }
 
   if (httpImageUrl) {
@@ -342,7 +349,7 @@ async function createSupersoloAsyncTask(cloud, modelConfig, feature, imageUrls) 
     model: modelConfig.model_id,
     prompt: feature.prompt || '',
     n: 1,
-    size: modelConfig.size || '1024x1024',
+    size: resolveImageSize(modelConfig, '1024x1024'),
     response_format: 'b64_json'
   }
 
@@ -487,6 +494,77 @@ async function executeGeneration(cloud, modelConfig, feature, imageUrls, options
   throw new Error(`暂不支持的 provider: ${modelConfig.provider}`)
 }
 
+function getModelCallId(modelConfig = {}) {
+  return modelConfig.model_call_id || modelConfig.modelCallId || ''
+}
+
+function getFallbackOptions(options = {}) {
+  return {
+    ...options,
+    upstreamTaskId: options.fallbackUpstreamTaskId || '',
+    clientBusinessId: options.clientBusinessId ? `${options.clientBusinessId}_fallback` : ''
+  }
+}
+
+function decorateGenerationResult(result, modelConfig, extra = {}) {
+  return {
+    ...(result || {}),
+    provider: modelConfig.provider || '',
+    modelCallId: getModelCallId(modelConfig),
+    ...extra
+  }
+}
+
+async function executeGenerationWithFallback(cloud, primaryModelConfig, fallbackModelConfig, feature, imageUrls, options = {}) {
+  const activeModelRole = options.activeModelRole === 'fallback' ? 'fallback' : 'primary'
+
+  if (activeModelRole === 'fallback') {
+    if (!fallbackModelConfig) {
+      throw new Error('fallback model config not found')
+    }
+    const fallbackResult = await executeGeneration(cloud, fallbackModelConfig, feature, imageUrls, options)
+    return decorateGenerationResult(fallbackResult, fallbackModelConfig, {
+      activeModelRole: 'fallback',
+      fallbackUsed: true
+    })
+  }
+
+  try {
+    const primaryResult = await executeGeneration(cloud, primaryModelConfig, feature, imageUrls, options)
+    return decorateGenerationResult(primaryResult, primaryModelConfig, {
+      activeModelRole: 'primary',
+      fallbackUsed: false
+    })
+  } catch (primaryErr) {
+    if (!fallbackModelConfig) {
+      throw primaryErr
+    }
+
+    const primaryErrorMessage = (primaryErr && primaryErr.message) || 'primary model failed'
+    console.warn('[generationExecutor] primary model failed, switching to fallback', {
+      provider: primaryModelConfig && primaryModelConfig.provider,
+      modelCallId: getModelCallId(primaryModelConfig),
+      fallbackProvider: fallbackModelConfig && fallbackModelConfig.provider,
+      fallbackModelCallId: getModelCallId(fallbackModelConfig),
+      error: primaryErrorMessage
+    })
+
+    try {
+      const fallbackResult = await executeGeneration(cloud, fallbackModelConfig, feature, imageUrls, getFallbackOptions(options))
+      return decorateGenerationResult(fallbackResult, fallbackModelConfig, {
+        activeModelRole: 'fallback',
+        fallbackUsed: true,
+        primaryErrorMessage
+      })
+    } catch (fallbackErr) {
+      fallbackErr.primaryErrorMessage = primaryErrorMessage
+      fallbackErr.fallbackErrorMessage = (fallbackErr && fallbackErr.message) || 'fallback model failed'
+      throw fallbackErr
+    }
+  }
+}
+
 module.exports = {
-  executeGeneration
+  executeGeneration,
+  executeGenerationWithFallback
 }
