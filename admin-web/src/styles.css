@@ -327,7 +327,9 @@ textarea:focus {
 }
 
 .form-notice,
-.input-field-editor {
+.input-field-editor,
+.debug-panel,
+.form-wide {
   grid-column: span 3;
 }
 
@@ -341,6 +343,12 @@ textarea:focus {
   border: 1px solid #f4c84a;
   background: #fff8d8;
   color: #7a5a00;
+}
+
+.success-text {
+  margin: 0;
+  color: #047857;
+  font-size: 13px;
 }
 
 .input-field-editor {
@@ -370,6 +378,124 @@ textarea:focus {
   grid-template-columns: 1fr 1fr 1.4fr 90px 74px 42px 42px;
   gap: 8px;
   align-items: center;
+}
+
+.debug-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #cfd8e6;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.debug-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.debug-upload {
+  display: grid;
+  gap: 10px;
+}
+
+.debug-file-list {
+  display: grid;
+  gap: 8px;
+}
+
+.debug-file-chip {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #dbe2ee;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.debug-file-chip .mono {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.debug-file-chip button {
+  min-height: 28px;
+  flex: 0 0 auto;
+  color: #b91c1c;
+  background: transparent;
+  border: 0;
+  font-weight: 650;
+}
+
+.debug-prompt {
+  display: grid;
+  gap: 6px;
+}
+
+.debug-prompt span {
+  color: #566174;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.debug-prompt pre {
+  max-height: 180px;
+  margin: 0;
+  padding: 10px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #172033;
+  background: #f8fafc;
+  border: 1px solid #dbe2ee;
+  border-radius: 6px;
+}
+
+.debug-result {
+  display: grid;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #edf1f6;
+}
+
+.debug-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.debug-meta span {
+  padding: 4px 8px;
+  color: #3b4658;
+  background: #f1f5f9;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.debug-image-wrap {
+  display: grid;
+  gap: 8px;
+}
+
+.debug-image-wrap img {
+  width: min(520px, 100%);
+  max-height: 520px;
+  object-fit: contain;
+  border: 1px solid #dbe2ee;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.debug-image-wrap p {
+  margin: 0;
+  white-space: normal;
+  word-break: break-all;
 }
 
 .inline-check {

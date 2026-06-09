@@ -8,7 +8,7 @@ const RUNNING_TIMEOUT_MS = 16 * 60 * 1000
 const UPSTREAM_POLL_INTERVAL_MS = 10000
 const TEMPLATE_TYPE_IMAGE = 'image_to_image'
 const TEMPLATE_TYPE_TEXT = 'text_to_image'
-const TEXT_TO_IMAGE_PROVIDERS = ['volcengine', 'supersolo', 'supersolo_async', 'toapis']
+const TEXT_TO_IMAGE_PROVIDERS = ['volcengine', 'supersolo', 'supersolo_async', 'toapis', 'joapi']
 
 function normalizeTemplateType(value) {
   return value === TEMPLATE_TYPE_TEXT ? TEMPLATE_TYPE_TEXT : TEMPLATE_TYPE_IMAGE
@@ -232,6 +232,7 @@ async function createTask(openid, featureId, imageUrls, inputValues = {}) {
       fallbackUsed: false,
       fallbackErrorMessage: '',
       featureNameSnapshot: feature.name || '',
+      enableUpscalePrintSnapshot: !!feature.enable_upscale_print,
       pointsCost,
       pointsDeducted,
       pointsRefunded: false,

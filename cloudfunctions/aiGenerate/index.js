@@ -11,6 +11,11 @@ const {
   compilePrompt,
   TEXT_TO_IMAGE_PROVIDERS
 } = require('./taskHelpers')
+const {
+  createUpscaleTask,
+  getUpscaleTaskStatus,
+  ensureUpscaleWorker
+} = require('./upscaleHelpers')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
@@ -144,6 +149,7 @@ async function runSyncGeneration(openid, featureId, imageUrls, inputValues = {})
         templateType,
         resultUrl: resultImageUrl,
         pointsCost: feature.points_cost,
+        enableUpscalePrint: !!feature.enable_upscale_print,
         executionDurationMs,
         totalDurationMs,
         rating: '',
@@ -255,9 +261,9 @@ async function rateTask(openid, historyId, rating) {
 
 exports.main = async (event, context) => {
   const wxContext = cloud.getWXContext()
-  const openid = wxContext.OPENID || event.userInfo?.openId
+  const openid = wxContext.OPENID || event.openid || event.userInfo?.openId
   const action = event.action || 'sync'
-  const { featureId, imageUrls, inputValues, taskId, page, pageSize, historyId, rating } = event
+  const { featureId, imageUrls, inputValues, taskId, page, pageSize, historyId, rating, upscaleTaskId } = event
 
   try {
     if (action === 'createTask') {
@@ -278,6 +284,18 @@ exports.main = async (event, context) => {
 
     if (action === 'listTasks') {
       return await listTasks(openid, page, pageSize)
+    }
+
+    if (action === 'createUpscaleTask') {
+      return await createUpscaleTask(cloud, openid, historyId)
+    }
+
+    if (action === 'getUpscaleTaskStatus') {
+      return await getUpscaleTaskStatus(cloud, openid, upscaleTaskId)
+    }
+
+    if (action === 'ensureUpscaleWorker') {
+      return await ensureUpscaleWorker(cloud, openid, upscaleTaskId)
     }
 
     return await runSyncGeneration(openid, featureId, imageUrls, inputValues)

@@ -1,8 +1,11 @@
 <view class="container pb-safe">
   <view wx:if="{{generationNotice.visible}}" class="generation-notice" bindtap="onGenerationNoticeTap">
-    <view class="generation-notice-dot">✓</view>
-    <text class="generation-notice-text">{{generationNotice.message}}</text>
-    <text class="generation-notice-action">查看</text>
+    <image class="generation-notice-icon" src="/images/ic_picture.png" mode="aspectFit"></image>
+    <view class="generation-notice-copy">
+      <text class="generation-notice-title">生图完成</text>
+      <text class="generation-notice-text">{{generationNotice.message}}</text>
+    </view>
+    <view class="generation-notice-action">立即查看</view>
   </view>
 
   <view class="user-header">

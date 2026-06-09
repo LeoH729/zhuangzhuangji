@@ -167,6 +167,8 @@
   background: #FFF5F5;
   padding: 8rpx 12rpx;
   border-radius: 8rpx;
+  max-height: 136rpx;
+  overflow: hidden;
 }
 
 .error-label {
@@ -181,4 +183,8 @@
   color: #E53935;
   line-height: 1.4;
   word-break: break-all;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }

@@ -152,7 +152,7 @@ App({
       wx.setStorageSync('generationWatchTasks', this.generationWatchTasks)
     }
     if (!options.silent) {
-      this.showGenerationNotice(taskId)
+      this.showGenerationNotice(taskId, options.task)
     }
     this.stopGenerationWatcherIfIdle()
   },
@@ -199,7 +199,7 @@ App({
             history_id: task.historyId || '',
             source: 'watcher'
           })
-          this.finishTrackedGenerationTask(taskId)
+          this.finishTrackedGenerationTask(taskId, { task })
         } else if (task.status === 'failed') {
           this.finishTrackedGenerationTask(taskId, { silent: true })
         }
@@ -211,7 +211,7 @@ App({
     }
   },
 
-  showGenerationNotice(taskId = '') {
+  showGenerationNotice(taskId = '', task = {}) {
     const currentPage = getTopPage()
     const hiddenRoutes = ['pages/analyzing/analyzing', 'pages/result/result', 'pages/generation-history/generation-history']
     if (currentPage && hiddenRoutes.includes(currentPage.route)) {
@@ -221,7 +221,7 @@ App({
     const notice = {
       visible: true,
       taskId,
-      message: '生成已完成，可前往生成列表查看'
+      message: task.featureNameSnapshot || task.featureName || task.name || 'AI生图模板'
     }
     this.globalData.generationNotice = notice
     wx.setStorageSync('generationNotice', notice)

@@ -28,6 +28,13 @@ Page({
     previewImage: createImageState('', IMAGE_STYLES.RESULT_PREVIEW),
     rating: '', // 'hang' | 'la' | ''
     isSavingPoster: false,
+    showSavePanel: false,
+    isSavingImage: false,
+    isUpscaling: false,
+    enableUpscalePrint: false,
+    upscaledUrl: '',
+    upscaleTaskId: '',
+    upscalePointsCost: 10,
     isSharedResult: false,
     showSharePanel: false,
     shareTask: {
@@ -76,6 +83,7 @@ Page({
   onUnload() {
     this.clearImageRetryTimers()
     this.clearShareRewardTimers()
+    this.clearUpscalePollTimer()
   },
 
   fetchShareTask() {
@@ -254,9 +262,24 @@ Page({
       const db = wx.cloud.database()
       const res = await db.collection('generation_history').doc(id).get()
       if (res.data) {
+        let enableUpscalePrint = res.data.enableUpscalePrint === true
+        if (typeof res.data.enableUpscalePrint !== 'boolean' && res.data.featureId) {
+          const featureRes = await wx.cloud.callFunction({
+            name: 'featureConfig',
+            data: {
+              action: 'getDetail',
+              payload: { id: res.data.featureId }
+            }
+          }).catch(() => null)
+          enableUpscalePrint = !!(featureRes && featureRes.result && featureRes.result.success && featureRes.result.data && featureRes.result.data.enable_upscale_print)
+        }
         this.setResultUrl(res.data.resultUrl || this.data.resultUrl, {
           rating: res.data.rating || '',
           featureId: res.data.featureId || '',
+          enableUpscalePrint,
+          upscaledUrl: res.data.upscaledUrl || '',
+          upscaleTaskId: res.data.upscaleTaskId || '',
+          upscalePointsCost: Number(res.data.upscalePointsCost || 10),
           featureName: res.data.featureName || res.data.featureNameSnapshot || 'AI生图魔法'
         })
       }
@@ -324,13 +347,39 @@ Page({
       history_id: this.data.id || '',
       feature_id: this.data.featureId || ''
     })
-    
+
+    if (this.data.enableUpscalePrint) {
+      this.setData({ showSavePanel: true })
+      return
+    }
+
+    this.saveOriginalImage()
+  },
+
+  closeSavePanel() {
+    if (this.data.isUpscaling || this.data.isSavingImage) return
+    this.setData({ showSavePanel: false })
+  },
+
+  saveOriginalFromPanel() {
+    this.setData({ showSavePanel: false })
+    this.saveOriginalImage()
+  },
+
+  saveOriginalImage() {
+    this.saveImageUrlToAlbum(this.data.resultUrl, '保存成功')
+  },
+
+  saveImageUrlToAlbum(imageUrl, successTitle = '保存成功') {
+    if (!imageUrl || this.data.isSavingImage) return
+    this.setData({ isSavingImage: true })
     wx.showLoading({ title: '保存中...' })
-    if (this.data.resultUrl.startsWith('cloud://')) {
+    if (imageUrl.startsWith('cloud://')) {
       wx.cloud.downloadFile({
-        fileID: this.data.resultUrl,
-        success: (res) => this.saveTempFileToAlbum(res.tempFilePath, '保存成功'),
+        fileID: imageUrl,
+        success: (res) => this.saveTempFileToAlbum(res.tempFilePath, successTitle),
         fail: () => {
+          this.setData({ isSavingImage: false })
           wx.hideLoading()
           wx.showToast({ title: '下载失败', icon: 'none' })
         }
@@ -339,16 +388,18 @@ Page({
     }
 
     wx.downloadFile({
-      url: this.data.resultUrl,
+      url: imageUrl,
       success: (res) => {
         if (res.statusCode === 200) {
-          this.saveTempFileToAlbum(res.tempFilePath, '保存成功')
+          this.saveTempFileToAlbum(res.tempFilePath, successTitle)
         } else {
+          this.setData({ isSavingImage: false })
           wx.hideLoading()
           wx.showToast({ title: '下载失败', icon: 'none' })
         }
       },
       fail: () => {
+        this.setData({ isSavingImage: false })
         wx.hideLoading()
         wx.showToast({ title: '下载失败', icon: 'none' })
       }
@@ -359,10 +410,12 @@ Page({
     wx.saveImageToPhotosAlbum({
       filePath,
       success: () => {
+        this.setData({ isSavingImage: false })
         wx.hideLoading()
         wx.showToast({ title: successTitle, icon: 'success' })
       },
       fail: (err) => {
+        this.setData({ isSavingImage: false })
         wx.hideLoading()
         if (err.errMsg.indexOf('auth deny') > -1 || err.errMsg.indexOf('auth denied') > -1) {
           wx.showModal({
@@ -379,6 +432,177 @@ Page({
         }
       }
     })
+  },
+
+  normalizeUpscaleErrorMessage(message = '') {
+    const text = String(message || '')
+    if (/insufficient credit/i.test(text)) {
+      return '\u9ad8\u6e05\u670d\u52a1\u4f59\u989d\u4e0d\u8db3\uff0c\u672c\u6b21\u661f\u5149\u5df2\u9000\u56de\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5'
+    }
+    if (/REPLICATE_API_TOKEN|unauthorized|forbidden/i.test(text)) {
+      return '\u9ad8\u6e05\u670d\u52a1\u672a\u914d\u7f6e\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5'
+    }
+    return text || '\u9ad8\u6e05\u7248\u751f\u6210\u5931\u8d25'
+  },
+
+  showUpscaleError(message) {
+    const content = this.normalizeUpscaleErrorMessage(message)
+    wx.showModal({
+      title: '\u9ad8\u6e05\u7248\u751f\u6210\u5931\u8d25',
+      content,
+      showCancel: false,
+      confirmText: '\u77e5\u9053\u4e86'
+    })
+  },
+
+  saveUpscaledFromPanel() {
+    if (this.data.isUpscaling || this.data.isSavingImage) return
+    if (this.data.upscaledUrl) {
+      this.setData({ showSavePanel: false })
+      this.saveImageUrlToAlbum(this.data.upscaledUrl, '高清版已保存')
+      return
+    }
+    if (!this.data.id) {
+      wx.showToast({ title: '缺少生成记录', icon: 'none' })
+      return
+    }
+    this.createUpscaleTask()
+  },
+
+  async createUpscaleTask() {
+    this.clearUpscalePollTimer()
+    this.setData({ isUpscaling: true })
+    wx.showLoading({
+      title: '\u9ad8\u6e05\u56fe\u52aa\u529b\u751f\u6210\u4e2d\uff0c\u53ef\u80fd\u82b1\u8d391-3\u5206\u949f\uff0c\u6548\u679c\u7edd\u5bf9\u503c\u5f97\u60a8\u7b49\u5f85...',
+      mask: true
+    })
+    try {
+      const res = await wx.cloud.callFunction({
+        name: 'aiGenerate',
+        data: {
+          action: 'createUpscaleTask',
+          historyId: this.data.id
+        }
+      })
+      const result = res.result || {}
+      if (!result.success) {
+        wx.hideLoading()
+        this.setData({ isUpscaling: false })
+        this.showUpscaleError(result.error)
+        return
+        wx.showToast({ title: result.error || '高清版生成失败', icon: 'none' })
+        return
+      }
+      if (result.resultUrl) {
+        this.setData({
+          showSavePanel: false,
+          isUpscaling: false,
+          upscaledUrl: result.resultUrl
+        })
+        wx.hideLoading()
+        this.saveImageUrlToAlbum(result.resultUrl, '高清版已保存')
+        return
+      }
+      const task = result.task || {}
+      if (task.resultUrl) {
+        this.setData({
+          showSavePanel: false,
+          isUpscaling: false,
+          upscaledUrl: task.resultUrl,
+          upscaleTaskId: task.upscaleTaskId || this.data.upscaleTaskId
+        })
+        wx.hideLoading()
+        this.saveImageUrlToAlbum(task.resultUrl, '高清版已保存')
+        return
+      }
+      if (!task.upscaleTaskId) {
+        wx.hideLoading()
+        this.setData({ isUpscaling: false })
+        wx.showToast({ title: '高清任务创建失败', icon: 'none' })
+        return
+      }
+      this.setData({
+        upscaleTaskId: task.upscaleTaskId,
+        upscalePointsCost: Number(task.pointsCost || this.data.upscalePointsCost || 10)
+      })
+      this.pollUpscaleTask(task.upscaleTaskId, true)
+    } catch (err) {
+      wx.hideLoading()
+      this.setData({ isUpscaling: false })
+      console.error('[Result] create upscale task failed:', err)
+      wx.showToast({ title: '高清版生成失败', icon: 'none' })
+    }
+  },
+
+  pollUpscaleTask(upscaleTaskId, immediate = false) {
+    this.clearUpscalePollTimer()
+    const run = () => this.fetchUpscaleTaskStatus(upscaleTaskId)
+    if (immediate) {
+      run()
+      return
+    }
+    this.upscalePollTimer = setTimeout(run, 3000)
+  },
+
+  async fetchUpscaleTaskStatus(upscaleTaskId) {
+    if (!upscaleTaskId) return
+    try {
+      await wx.cloud.callFunction({
+        name: 'aiGenerate',
+        data: {
+          action: 'ensureUpscaleWorker',
+          upscaleTaskId
+        }
+      }).catch(() => null)
+
+      const res = await wx.cloud.callFunction({
+        name: 'aiGenerate',
+        data: {
+          action: 'getUpscaleTaskStatus',
+          upscaleTaskId
+        }
+      })
+      const result = res.result || {}
+      const task = result.task || {}
+      if (!result.success) {
+        wx.hideLoading()
+        this.setData({ isUpscaling: false })
+        this.showUpscaleError(result.error)
+        return
+        wx.showToast({ title: result.error || '高清版生成失败', icon: 'none' })
+        return
+      }
+      if (task.status === 'succeeded' && task.resultUrl) {
+        wx.hideLoading()
+        this.setData({
+          showSavePanel: false,
+          isUpscaling: false,
+          upscaledUrl: task.resultUrl,
+          upscaleTaskId: task.upscaleTaskId || upscaleTaskId
+        })
+        this.saveImageUrlToAlbum(task.resultUrl, '高清版已保存')
+        return
+      }
+      if (task.status === 'failed') {
+        wx.hideLoading()
+        this.setData({ isUpscaling: false })
+        this.showUpscaleError(task.errorMessage)
+        return
+        wx.showToast({ title: task.errorMessage || '高清版生成失败', icon: 'none' })
+        return
+      }
+      this.pollUpscaleTask(upscaleTaskId)
+    } catch (err) {
+      console.error('[Result] poll upscale failed:', err)
+      this.pollUpscaleTask(upscaleTaskId)
+    }
+  },
+
+  clearUpscalePollTimer() {
+    if (this.upscalePollTimer) {
+      clearTimeout(this.upscalePollTimer)
+      this.upscalePollTimer = null
+    }
   },
 
   async saveSharePoster() {
@@ -532,13 +756,6 @@ Page({
               return
             }
 
-            const dpr = wx.getSystemInfoSync().pixelRatio || 1
-            canvas.width = POSTER_WIDTH * dpr
-            canvas.height = POSTER_HEIGHT * dpr
-
-            const ctx = canvas.getContext('2d')
-            ctx.scale(dpr, dpr)
-
             const posterImages = await Promise.all([
               this.loadCanvasImage(canvas, resultImagePath),
               this.loadCanvasImage(canvas, qrCodePath)
@@ -546,56 +763,39 @@ Page({
             const resultImage = posterImages[0]
             const qrImage = posterImages[1]
 
-            const cardX = 76
-            const cardY = 66
-            const cardW = POSTER_WIDTH - cardX * 2
-            const cardH = POSTER_HEIGHT - cardY * 2
-            const innerPadding = 28
-            const footerH = 148
-            const imageX = cardX + innerPadding
-            const imageY = cardY + innerPadding
-            const imageW = cardW - innerPadding * 2
-            const imageH = cardH - footerH - innerPadding * 2
-            const qrSize = 108
-            const qrX = cardX + cardW - innerPadding - qrSize
-            const qrY = cardY + cardH - innerPadding - qrSize
-            const textX = imageX
-            const textY = cardY + cardH - footerH + 36
-            const textMaxW = qrX - textX - 30
-            const imageRatio = resultImage.width / resultImage.height
-            const posterRatio = imageW / imageH
-            let sx = 0
-            let sy = 0
-            let sw = resultImage.width
-            let sh = resultImage.height
+            const pagePadding = 30
+            const imageW = resultImage.width
+            const imageH = resultImage.height
+            const posterW = imageW + pagePadding * 2
+            const posterH = imageH + pagePadding * 2
+            const imageX = pagePadding
+            const imageY = pagePadding
+            const qrSize = Math.max(96, Math.min(180, Math.round(Math.min(imageW, imageH) * 0.22)))
+            const qrPadding = 16
+            const qrTextGap = 10
+            const qrTextLineH = Math.max(24, Math.round(qrSize * 0.18))
+            const qrCardW = qrSize + qrPadding * 2
+            const qrCardH = qrPadding + qrSize + qrTextGap + qrTextLineH * 2 + qrPadding
+            const qrMargin = 0
+            const qrCardX = Math.max(pagePadding, pagePadding + imageW - qrCardW - qrMargin)
+            const qrCardY = Math.max(pagePadding, pagePadding + imageH - qrCardH - qrMargin)
+            const qrX = qrCardX + qrPadding
+            const qrY = qrCardY + qrPadding
+            const textCenterX = qrCardX + qrCardW / 2
+            const textStartY = qrY + qrSize + qrTextGap + qrTextLineH / 2
 
-            if (imageRatio > posterRatio) {
-              sw = resultImage.height * posterRatio
-              sx = (resultImage.width - sw) / 2
-            } else {
-              sh = resultImage.width / posterRatio
-              sy = (resultImage.height - sh) / 2
-            }
+            canvas.width = posterW
+            canvas.height = posterH
+
+            const ctx = canvas.getContext('2d')
+            const textX = 0
+            const textY = posterH + 100
+            const textMaxW = 0
 
             ctx.fillStyle = '#ffffff'
-            ctx.fillRect(0, 0, POSTER_WIDTH, POSTER_HEIGHT)
+            ctx.fillRect(0, 0, posterW, posterH)
 
-            ctx.save()
-            ctx.shadowColor = 'rgba(32,32,32,0.12)'
-            ctx.shadowBlur = 24
-            ctx.shadowOffsetY = 10
-            ctx.fillStyle = '#ffffff'
-            this.drawRoundRect(ctx, cardX, cardY, cardW, cardH, 46)
-            ctx.fill()
-            ctx.restore()
-
-            ctx.save()
-            this.drawRoundRect(ctx, imageX, imageY, imageW, imageH, 34)
-            ctx.fillStyle = '#eeeeee'
-            ctx.fill()
-            ctx.clip()
-            ctx.drawImage(resultImage, sx, sy, sw, sh, imageX, imageY, imageW, imageH)
-            ctx.restore()
+            ctx.drawImage(resultImage, imageX, imageY, imageW, imageH)
 
             ctx.fillStyle = '#121212'
             ctx.font = 'normal 700 31px sans-serif'
@@ -607,16 +807,30 @@ Page({
             this.drawTextLine(ctx, '长按识别小程序码体验同款魔法', textX, textY + 46, textMaxW)
 
             ctx.fillStyle = '#ffffff'
-            this.drawRoundRect(ctx, qrX - 10, qrY - 10, qrSize + 20, qrSize + 20, 22)
+            ctx.beginPath()
+            ctx.moveTo(qrCardX + 18, qrCardY)
+            ctx.lineTo(qrCardX + qrCardW, qrCardY)
+            ctx.lineTo(qrCardX + qrCardW, qrCardY + qrCardH)
+            ctx.lineTo(qrCardX, qrCardY + qrCardH)
+            ctx.lineTo(qrCardX, qrCardY + 18)
+            ctx.arcTo(qrCardX, qrCardY, qrCardX + 18, qrCardY, 18)
+            ctx.closePath()
             ctx.fill()
             ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize)
 
+            ctx.fillStyle = '#111111'
+            ctx.font = `normal 500 ${qrTextLineH}px sans-serif`
+            ctx.textAlign = 'center'
+            ctx.textBaseline = 'middle'
+            ctx.fillText('长按体验同款', textCenterX, textStartY)
+            ctx.fillText('生图模板', textCenterX, textStartY + qrTextLineH)
+
             wx.canvasToTempFilePath({
               canvas,
-              width: POSTER_WIDTH,
-              height: POSTER_HEIGHT,
-              destWidth: POSTER_WIDTH * dpr,
-              destHeight: POSTER_HEIGHT * dpr,
+              width: posterW,
+              height: posterH,
+              destWidth: posterW,
+              destHeight: posterH,
               success: res => resolve(res.tempFilePath),
               fail: reject
             })

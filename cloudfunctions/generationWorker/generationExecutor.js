@@ -25,6 +25,14 @@ function resolveImageSize(modelConfig = {}, fallback = '1024x1024') {
   return modelConfig.size || fallback
 }
 
+function isGptImageModel(modelConfig = {}) {
+  return String(modelConfig.model_id || '').toLowerCase().includes('gpt')
+}
+
+function isGeminiImageModel(modelConfig = {}) {
+  return String(modelConfig.model_id || '').toLowerCase().includes('gemini')
+}
+
 function guessImageExtension(contentType = '', url = '') {
   const lowerType = String(contentType).toLowerCase()
   if (lowerType.includes('webp')) return 'webp'
@@ -167,7 +175,7 @@ async function callVolcengine(cloud, modelConfig, feature, imageUrls) {
     response_format: 'url',
     size: '2K',
     stream: false,
-    watermark: true
+    watermark: false
   }
 
   if (httpImageUrl) {
@@ -199,12 +207,25 @@ async function callVolcengine(cloud, modelConfig, feature, imageUrls) {
 
 async function callSupersolo(cloud, modelConfig, feature, imageUrls) {
   const httpImageUrl = await resolveHttpImageUrl(cloud, imageUrls)
+  if (isGeminiImageModel(modelConfig)) {
+    return callGeminiImage(cloud, modelConfig, feature, httpImageUrl)
+  }
+  if (isGptImageModel(modelConfig) && httpImageUrl) {
+    return callSupersoloGptImageEdit(cloud, modelConfig, feature, httpImageUrl)
+  }
+  return callSupersoloImageGeneration(cloud, modelConfig, feature, httpImageUrl)
+}
+
+async function callSupersoloImageGeneration(cloud, modelConfig, feature, httpImageUrl) {
   const payload = {
     model: modelConfig.model_id,
     prompt: feature.prompt || '',
     n: 1,
-    size: resolveImageSize(modelConfig, '1024x1024'),
-    response_format: 'b64_json'
+    size: resolveImageSize(modelConfig, '1024x1024')
+  }
+
+  if (!isGptImageModel(modelConfig)) {
+    payload.response_format = 'b64_json'
   }
 
   if (httpImageUrl) {
@@ -233,6 +254,113 @@ async function callSupersolo(cloud, modelConfig, feature, imageUrls) {
 
   if (!resultImageUrl) {
     throw new Error('中转站未返回图片 URL 或 b64_json 数据')
+  }
+  return { status: 'completed', resultImageUrl }
+}
+
+async function callSupersoloGptImageEdit(cloud, modelConfig, feature, httpImageUrl) {
+  const imageFile = await downloadImageBuffer(httpImageUrl)
+  const form = new FormData()
+  form.append('model', modelConfig.model_id)
+  form.append('prompt', feature.prompt || '')
+  form.append('n', String(modelConfig.n || 1))
+  form.append('size', 'auto')
+  form.append('image', imageFile.buffer, {
+    filename: `reference.${imageFile.extension}`,
+    contentType: imageFile.contentType
+  })
+
+  const baseUrl = normalizeBaseUrl(modelConfig.base_url)
+  const response = await axios.post(
+    `${baseUrl}/images/edits`,
+    form,
+    {
+      headers: {
+        ...form.getHeaders(),
+        Authorization: `Bearer ${modelConfig.api_key}`
+      },
+      timeout: REQUEST_TIMEOUT_MS
+    }
+  )
+
+  const proxyRes = response.data
+  if (!proxyRes || !proxyRes.data || proxyRes.data.length === 0) {
+    throw new Error(`中转站编辑接口报错: ${JSON.stringify((proxyRes && proxyRes.error) || proxyRes)}`)
+  }
+
+  const imageResult = proxyRes.data[0]
+  let resultImageUrl = ''
+  if (imageResult.b64_json) {
+    resultImageUrl = await uploadB64ToCloud(cloud, imageResult.b64_json)
+  } else if (imageResult.url) {
+    resultImageUrl = await uploadRemoteUrlToCloud(cloud, imageResult.url)
+  }
+  if (!resultImageUrl) {
+    throw new Error('中转站编辑接口未返回图片 URL 或 b64_json 数据')
+  }
+  return { status: 'completed', resultImageUrl }
+}
+
+function buildGeminiEndpoint(modelConfig = {}) {
+  const endpoint = normalizeBaseUrl(modelConfig.base_url)
+  if (!endpoint) {
+    throw new Error('Gemini 模型缺少完整 base_url，请在后台填写完整 generateContent 接口地址')
+  }
+  return endpoint
+}
+
+function findGeminiImagePart(responseData = {}) {
+  const candidates = Array.isArray(responseData.candidates) ? responseData.candidates : []
+  for (const candidate of candidates) {
+    const parts = candidate && candidate.content && Array.isArray(candidate.content.parts)
+      ? candidate.content.parts
+      : []
+    for (const part of parts) {
+      const inlineData = part.inlineData || part.inline_data
+      if (inlineData && inlineData.data) {
+        return inlineData
+      }
+    }
+  }
+  return null
+}
+
+async function callGeminiImage(cloud, modelConfig, feature, httpImageUrl) {
+  const parts = [{ text: feature.prompt || '' }]
+  if (httpImageUrl) {
+    const imageFile = await downloadImageBuffer(httpImageUrl)
+    parts.push({
+      inline_data: {
+        mime_type: imageFile.contentType,
+        data: imageFile.buffer.toString('base64')
+      }
+    })
+  }
+
+  const response = await axios.post(
+    buildGeminiEndpoint(modelConfig),
+    {
+      contents: [{ role: 'user', parts }],
+      generationConfig: {
+        responseModalities: ['TEXT', 'IMAGE']
+      }
+    },
+    {
+      headers: {
+        'x-goog-api-key': modelConfig.api_key,
+        'Content-Type': 'application/json'
+      },
+      timeout: REQUEST_TIMEOUT_MS
+    }
+  )
+
+  const imagePart = findGeminiImagePart(response.data)
+  if (!imagePart || !imagePart.data) {
+    throw new Error(`Gemini 未返回图片数据: ${JSON.stringify(response.data)}`)
+  }
+  const resultImageUrl = await uploadB64ToCloud(cloud, imagePart.data)
+  if (!resultImageUrl) {
+    throw new Error('Gemini 图片转存云存储失败')
   }
   return { status: 'completed', resultImageUrl }
 }
@@ -472,6 +600,10 @@ async function callSupersoloAsync(cloud, modelConfig, feature, imageUrls, option
 }
 
 async function executeGeneration(cloud, modelConfig, feature, imageUrls, options = {}) {
+  if (isGeminiImageModel(modelConfig) || isGptImageModel(modelConfig)) {
+    return callSupersolo(cloud, modelConfig, feature, imageUrls)
+  }
+
   if (modelConfig.provider === 'coze') {
     return callCoze(modelConfig, feature, imageUrls)
   }

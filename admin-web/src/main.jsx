@@ -11,6 +11,7 @@ import {
   Loader2,
   LogOut,
   Plus,
+  Play,
   RefreshCw,
   Save,
   Settings,
@@ -64,6 +65,7 @@ const EMPTY_FEATURE = {
   input_fields: [],
   upload_count: 1,
   points_cost: 5,
+  enable_upscale_print: false,
   hang_count: 0,
   la_count: 0,
   model_call_id: '',
@@ -78,7 +80,11 @@ const TEMPLATE_TYPE_LABELS = {
   image_to_image: '图生图',
   text_to_image: '文生图'
 }
-const TEXT_TO_IMAGE_PROVIDERS = ['volcengine', 'supersolo', 'supersolo_async', 'toapis']
+const FEATURE_STATUS_LABELS = {
+  0: '草稿',
+  1: '已发布'
+}
+const TEXT_TO_IMAGE_PROVIDERS = ['volcengine', 'supersolo', 'supersolo_async', 'toapis', 'joapi']
 const EMPTY_ADMIN = {
   uid: '',
   openid: '',
@@ -654,11 +660,31 @@ function normalizeInputFields(fields = []) {
     .sort((a, b) => a.sort - b.sort)
 }
 
+function escapeRegExp(value = '') {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function compilePrompt(prompt = '', fields = [], inputValues = {}) {
+  let compiled = String(prompt || '')
+  fields.forEach((field) => {
+    compiled = compiled.replace(new RegExp(`\\{${escapeRegExp(field.key)}\\}`, 'g'), inputValues[field.key] || '')
+  })
+  return compiled
+}
+
+function formatDuration(ms = 0) {
+  const value = Number(ms || 0)
+  if (!value || value < 0) return '-'
+  if (value < 1000) return `${value}ms`
+  return `${(value / 1000).toFixed(1)}s`
+}
+
 function normalizeFeatureForm(form = {}) {
   const templateType = form.template_type === 'text_to_image' ? 'text_to_image' : 'image_to_image'
   return {
     ...form,
     template_type: templateType,
+    enable_upscale_print: !!form.enable_upscale_print,
     upload_count: templateType === 'text_to_image' ? 0 : Number(form.upload_count || 1),
     input_fields: templateType === 'text_to_image' ? normalizeInputFields(form.input_fields) : []
   }
@@ -668,20 +694,237 @@ function getSelectedModel(models = [], modelCallId = '') {
   return (models || []).find((item) => item.model_call_id === modelCallId) || null
 }
 
+function FeatureDebugPanel({ form, editingId }) {
+  const [inputValues, setInputValues] = useState({})
+  const [imageUrls, setImageUrls] = useState([])
+  const [uploading, setUploading] = useState(false)
+  const [running, setRunning] = useState(false)
+  const [task, setTask] = useState(null)
+  const [error, setError] = useState('')
+  const templateType = form.template_type === 'text_to_image' ? 'text_to_image' : 'image_to_image'
+  const inputFields = useMemo(() => normalizeInputFields(form.input_fields), [form.input_fields])
+  const localCompiledPrompt = templateType === 'text_to_image'
+    ? compilePrompt(form.prompt || '', inputFields, inputValues)
+    : (form.prompt || '')
+
+  useEffect(() => {
+    const nextValues = {}
+    inputFields.forEach((field) => {
+      nextValues[field.key] = inputValues[field.key] || ''
+    })
+    setInputValues(nextValues)
+  }, [form.template_type, form.input_fields])
+
+  useEffect(() => {
+    if (!task || !task.taskId || !['pending', 'running'].includes(task.status)) return undefined
+    const poll = async () => {
+      try {
+        const res = await callAdmin('getDebugGenerationStatus', { taskId: task.taskId })
+        const nextTask = res.task || null
+        setTask(nextTask)
+        if (nextTask && !['pending', 'running'].includes(nextTask.status)) {
+          setRunning(false)
+        }
+      } catch (err) {
+        setError(err.message)
+        setRunning(false)
+      }
+    }
+    const timer = setInterval(poll, 5000)
+    poll()
+    return () => clearInterval(timer)
+  }, [task && task.taskId, task && task.status])
+
+  const updateInputValue = (key, value, maxLength = 0) => {
+    const nextValue = maxLength > 0 ? value.slice(0, maxLength) : value
+    setInputValues((current) => ({ ...current, [key]: nextValue }))
+  }
+
+  const uploadDebugImages = async (event) => {
+    const files = Array.from(event.target.files || [])
+    if (files.length === 0) return
+    setUploading(true)
+    setError('')
+    try {
+      const maxCount = Math.max(Number(form.upload_count || 1), 1)
+      const remain = Math.max(maxCount - imageUrls.length, 0)
+      const uploadFiles = files.slice(0, remain || 1)
+      const uploaded = []
+      for (const [index, file] of uploadFiles.entries()) {
+        const ext = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')) : '.jpg'
+        const cloudPath = `admin-debug-inputs/${Date.now()}_${index}_${Math.floor(Math.random() * 100000)}${ext}`
+        const res = await app.uploadFile({ cloudPath, filePath: file })
+        if (res.fileID) uploaded.push(res.fileID)
+      }
+      setImageUrls((current) => [...current, ...uploaded].slice(0, maxCount))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setUploading(false)
+      event.target.value = ''
+    }
+  }
+
+  const removeDebugImage = (fileID) => {
+    setImageUrls((current) => current.filter((item) => item !== fileID))
+  }
+
+  const startDebug = async () => {
+    setError('')
+    setRunning(true)
+    try {
+      const payload = {
+        id: editingId,
+        featureId: editingId,
+        feature: normalizeFeatureForm(form),
+        imageUrls: templateType === 'image_to_image' ? imageUrls : [],
+        inputValues
+      }
+      const res = await callAdmin('debugFeatureGeneration', payload)
+      setTask({
+        taskId: res.taskId,
+        status: 'pending',
+        compiledPrompt: res.compiledPrompt || localCompiledPrompt
+      })
+    } catch (err) {
+      setError(err.message)
+      setRunning(false)
+    }
+  }
+
+  const canStart = !!form.name && !!form.model_call_id && !!String(form.prompt || '').trim() &&
+    (templateType === 'text_to_image'
+      ? inputFields.every((field) => !field.required || String(inputValues[field.key] || '').trim())
+      : imageUrls.length > 0)
+
+  return (
+    <div className="debug-panel">
+      <div className="editor-subhead">
+        <strong>调试生成</strong>
+        <button type="button" className="primary-button" onClick={startDebug} disabled={running || uploading || !canStart}>
+          {running ? <Loader2 className="spin" size={16} /> : <Play size={16} />}
+          开始调试
+        </button>
+      </div>
+      {templateType === 'text_to_image' ? (
+        <div className="debug-fields">
+          {inputFields.map((field) => (
+            <Field key={field.key} label={field.title || field.key}>
+              <TextInput
+                value={inputValues[field.key] || ''}
+                placeholder={field.placeholder}
+                maxLength={field.maxLength || undefined}
+                onChange={(value) => updateInputValue(field.key, value, field.maxLength)}
+              />
+            </Field>
+          ))}
+        </div>
+      ) : (
+        <div className="debug-upload">
+          <Field label="测试参考图">
+            <input type="file" accept="image/*" multiple onChange={uploadDebugImages} disabled={uploading} />
+          </Field>
+          {imageUrls.length ? (
+            <div className="debug-file-list">
+              {imageUrls.map((fileID) => (
+                <span key={fileID} className="debug-file-chip">
+                  <span className="mono">{fileID}</span>
+                  <button type="button" onClick={() => removeDebugImage(fileID)}>移除</button>
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      )}
+      <div className="debug-prompt">
+        <span>实际提示词</span>
+        <pre>{(task && task.compiledPrompt) || localCompiledPrompt || '-'}</pre>
+      </div>
+      {error ? <p className="error-text">{error}</p> : null}
+      {task ? (
+        <div className={`debug-result ${task.status || ''}`}>
+          <div className="debug-meta">
+            <span>状态：{task.status || '-'}</span>
+            <span>模型：{task.modelCallId || form.model_call_id || '-'}</span>
+            <span>耗时：{formatDuration(task.totalDurationMs || task.executionDurationMs)}</span>
+            {task.fallbackUsed ? <span>已使用兜底模型</span> : null}
+          </div>
+          {task.errorMessage ? <p className="error-text">{task.errorMessage}</p> : null}
+          {task.primaryErrorMessage ? <p className="muted">主模型错误：{task.primaryErrorMessage}</p> : null}
+          {task.resultTempUrl ? (
+            <div className="debug-image-wrap">
+              <img src={task.resultTempUrl} alt="调试生成结果" />
+              <p className="mono">{task.resultUrl}</p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function FeaturesPanel() {
   const [sort, toggleSort] = useSort('createdAt', 'desc')
   const [imageFolder, setImageFolder] = useState('')
   const { items, refs, loading, error, reload, pagination } = useAdminList('listFeatures', [sort.sortBy, sort.sortOrder, imageFolder], () => ({ ...sort, imageFolder }))
   const [form, setForm] = useState(EMPTY_FEATURE)
   const [editingId, setEditingId] = useState('')
+  const [featureMessage, setFeatureMessage] = useState('')
+  const [featureError, setFeatureError] = useState('')
+  const [savingDraft, setSavingDraft] = useState(false)
+  const [publishing, setPublishing] = useState(false)
   const selectedModel = getSelectedModel(refs.models || [], form.model_call_id)
   const selectedFallbackModel = getSelectedModel(refs.models || [], form.fallback_model_call_id)
   const textProviderCompatible = !selectedModel || TEXT_TO_IMAGE_PROVIDERS.includes(selectedModel.provider)
   const fallbackTextProviderCompatible = !selectedFallbackModel || TEXT_TO_IMAGE_PROVIDERS.includes(selectedFallbackModel.provider)
 
-  const save = async () => {
+  const saveDraft = async () => {
     const payload = normalizeFeatureForm(form)
-    await callAdmin(editingId ? 'updateFeature' : 'createFeature', editingId ? { id: editingId, data: payload } : payload)
+    setSavingDraft(true)
+    setFeatureError('')
+    setFeatureMessage('')
+    try {
+      const res = await callAdmin('saveFeatureDraft', editingId ? { id: editingId, data: payload } : { data: payload })
+      if (!editingId && res._id) {
+        setEditingId(res._id)
+      }
+      setFeatureMessage('草稿已保存，未发布到小程序')
+      await reload()
+    } catch (err) {
+      setFeatureError(err.message)
+    } finally {
+      setSavingDraft(false)
+    }
+  }
+
+  const publish = async () => {
+    const payload = normalizeFeatureForm({ ...form, status: 1 })
+    setPublishing(true)
+    setFeatureError('')
+    setFeatureMessage('')
+    try {
+      const res = await callAdmin('publishFeature', editingId ? { id: editingId, data: payload } : { data: payload })
+      if (!editingId && res._id) {
+        setEditingId(res._id)
+      }
+      setForm({ ...payload, status: 1 })
+      setFeatureMessage('已发布到小程序')
+      await reload()
+    } catch (err) {
+      setFeatureError(err.message)
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  const resetForm = () => {
+    setForm(EMPTY_FEATURE)
+    setEditingId('')
+    setFeatureMessage('')
+    setFeatureError('')
+  }
+
+  const resetAfterDelete = async () => {
     setForm(EMPTY_FEATURE)
     setEditingId('')
     await reload()
@@ -689,13 +932,15 @@ function FeaturesPanel() {
 
   const edit = (item) => {
     setEditingId(item._id)
-    setForm(normalizeFeatureForm({ ...EMPTY_FEATURE, ...item }))
+    setForm(normalizeFeatureForm({ ...EMPTY_FEATURE, ...item, ...(item.has_draft && item.draft_data ? item.draft_data : {}) }))
+    setFeatureMessage(item.has_draft ? '正在编辑未发布草稿' : '')
+    setFeatureError('')
   }
 
   const remove = async (id) => {
     if (!window.confirm('确定删除这个卡片？')) return
     await callAdmin('deleteFeature', { id })
-    await reload()
+    await resetAfterDelete()
   }
 
   const updateTemplateType = (value) => {
@@ -737,7 +982,24 @@ function FeaturesPanel() {
 
   return (
     <section className="workspace">
-      <Editor title={editingId ? '编辑生图卡片' : '新增生图卡片'} onSave={save} onReset={() => { setForm(EMPTY_FEATURE); setEditingId('') }}>
+      <Editor
+        title={editingId ? '编辑生图卡片' : '新增生图卡片'}
+        onSave={saveDraft}
+        onReset={resetForm}
+        actions={(
+          <>
+            <button type="button" className="secondary-button" onClick={resetForm}>清空</button>
+            <button type="button" className="secondary-button" onClick={saveDraft} disabled={savingDraft || publishing}>
+              {savingDraft ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
+              保存草稿
+            </button>
+            <button type="button" className="primary-button" onClick={publish} disabled={savingDraft || publishing}>
+              {publishing ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
+              发布到小程序
+            </button>
+          </>
+        )}
+      >
         <Field label="名称"><TextInput value={form.name} onChange={(value) => setForm({ ...form, name: value })} /></Field>
         <Field label="分组"><Select value={form.group} onChange={(value) => setForm({ ...form, group: value })} options={(refs.groups || []).map((item) => item.name)} /></Field>
         <Field label="模型"><Select value={form.model_call_id} onChange={(value) => setForm({ ...form, model_call_id: value })} options={(refs.models || []).map((item) => item.model_call_id)} /></Field>
@@ -759,6 +1021,12 @@ function FeaturesPanel() {
         <Field label="详情图"><ImageAssetSelect value={form.detail_banner} onChange={(value) => setForm({ ...form, detail_banner: value })} images={refs.images || []} /></Field>
         <Field label="上传数"><NumberInput value={form.upload_count} disabled={form.template_type === 'text_to_image'} onChange={(value) => setForm({ ...form, upload_count: value })} /></Field>
         <Field label="星光消耗"><NumberInput value={form.points_cost} onChange={(value) => setForm({ ...form, points_cost: value })} /></Field>
+        <Field label="高清打印">
+          <label className="inline-check">
+            <input type="checkbox" checked={!!form.enable_upscale_print} onChange={(event) => setForm({ ...form, enable_upscale_print: event.target.checked })} />
+            开启保存时生成高清可打印版
+          </label>
+        </Field>
         <Field label="夯数量"><NumberInput value={form.hang_count} onChange={(value) => setForm({ ...form, hang_count: value })} /></Field>
         <Field label="拉数量"><NumberInput value={form.la_count} onChange={(value) => setForm({ ...form, la_count: value })} /></Field>
         <Field label="状态"><NumberInput value={form.status} onChange={(value) => setForm({ ...form, status: value })} /></Field>
@@ -794,6 +1062,9 @@ function FeaturesPanel() {
           </div>
         ) : null}
         <Field label="提示词"><Textarea value={form.prompt} onChange={(value) => setForm({ ...form, prompt: value })} /></Field>
+        <FeatureDebugPanel form={form} editingId={editingId} />
+        {featureError ? <p className="error-text form-wide">{featureError}</p> : null}
+        {featureMessage ? <p className="success-text form-wide">{featureMessage}</p> : null}
       </Editor>
       <DataTable loading={loading} error={error} onRefresh={reload} pagination={pagination}>
         <thead><tr>
@@ -804,14 +1075,15 @@ function FeaturesPanel() {
           <SortableTh field="points_cost" sort={sort} onSort={toggleSort}>消耗</SortableTh>
           <SortableTh field="hang_count" sort={sort} onSort={toggleSort}>夯</SortableTh>
           <SortableTh field="la_count" sort={sort} onSort={toggleSort}>拉</SortableTh>
-          <SortableTh field="status" sort={sort} onSort={toggleSort}>状态</SortableTh>
+          <SortableTh field="status" sort={sort} onSort={toggleSort}>发布状态</SortableTh>
+          <th>草稿</th>
           <SortableTh field="sort" sort={sort} onSort={toggleSort}>排序</SortableTh>
           <SortableTh field="createdAt" sort={sort} onSort={toggleSort}>创建时间</SortableTh>
           <th></th>
         </tr></thead>
         <tbody>{items.map((item) => (
           <tr key={item._id}>
-            <td>{item.name}</td><td>{item.group}</td><td>{item.model_call_id}</td><td>{item.fallback_model_call_id || '-'}</td><td>{item.points_cost}</td><td>{item.hang_count || 0}</td><td>{item.la_count || 0}</td><td>{item.status}</td><td>{item.sort}</td><td>{formatDate(item.createdAt)}</td>
+            <td>{item.name}</td><td>{item.group}</td><td>{item.model_call_id}</td><td>{item.fallback_model_call_id || '-'}</td><td>{item.points_cost}</td><td>{item.hang_count || 0}</td><td>{item.la_count || 0}</td><td>{FEATURE_STATUS_LABELS[item.status] || item.status}</td><td>{item.has_draft ? '有' : '-'}</td><td>{item.sort}</td><td>{formatDate(item.createdAt)}</td>
             <td className="row-actions"><button onClick={() => edit(item)}>编辑</button><IconButton title="删除" onClick={() => remove(item._id)}><Trash2 size={16} /></IconButton></td>
           </tr>
         ))}</tbody>
@@ -1030,7 +1302,7 @@ function Select({ value, onChange, options, labels = {} }) {
   )
 }
 
-function Editor({ title, children, onSave, onReset }) {
+function Editor({ title, children, onSave, onReset, actions = null }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -1052,11 +1324,15 @@ function Editor({ title, children, onSave, onReset }) {
       <div className="section-head">
         <h2>{title}</h2>
         <div className="toolbar">
-          <button type="button" className="secondary-button" onClick={onReset}>清空</button>
-          <button className="primary-button" disabled={saving}>
-            {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
-            保存
-          </button>
+          {actions || (
+            <>
+              <button type="button" className="secondary-button" onClick={onReset}>清空</button>
+              <button className="primary-button" disabled={saving}>
+                {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
+                保存
+              </button>
+            </>
+          )}
         </div>
       </div>
       <div className="form-grid">{children}</div>

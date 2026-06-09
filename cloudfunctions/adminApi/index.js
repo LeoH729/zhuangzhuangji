@@ -32,6 +32,10 @@ const COLLECTIONS = {
   pointsConfig: 'points_config'
 }
 
+const TEMPLATE_TYPE_IMAGE = 'image_to_image'
+const TEMPLATE_TYPE_TEXT = 'text_to_image'
+const TEXT_TO_IMAGE_PROVIDERS = ['volcengine', 'supersolo', 'supersolo_async', 'toapis', 'joapi']
+
 const MODEL_FIELDS = [
   'model_call_id',
   'name',
@@ -52,6 +56,7 @@ const FEATURE_FIELDS = [
   'detail_banner',
   'upload_count',
   'points_cost',
+  'enable_upscale_print',
   'hang_count',
   'la_count',
   'model_call_id',
@@ -64,6 +69,7 @@ const FEATURE_FIELDS = [
   'tag',
   'description'
 ]
+const FEATURE_DRAFT_FIELDS = ['draft_data', 'has_draft', 'draft_updatedAt', 'draftBy', 'publishedAt', 'publishedBy']
 const IMAGE_FIELDS = [
   'name',
   'category',
@@ -92,6 +98,53 @@ function normalizeNumber(value, fallback = 0) {
 
 function cleanPrefix(prefix = '') {
   return String(prefix || '').replace(/^\/+/, '').replace(/\/+$/, '')
+}
+
+function normalizeTemplateType(value) {
+  return value === TEMPLATE_TYPE_TEXT ? TEMPLATE_TYPE_TEXT : TEMPLATE_TYPE_IMAGE
+}
+
+function normalizeInputFields(fields = []) {
+  if (!Array.isArray(fields)) return []
+  return fields
+    .map((field, index) => ({
+      key: String(field && field.key || '').trim(),
+      title: String(field && (field.title || field.label) || '').trim(),
+      placeholder: String(field && field.placeholder || '').trim(),
+      maxLength: normalizeNumber(field && (field.maxLength || field.max_length || field.limit), 0),
+      required: field && field.required !== false,
+      sort: normalizeNumber(field && field.sort, index)
+    }))
+    .filter((field) => field.key)
+    .sort((a, b) => a.sort - b.sort)
+}
+
+function normalizeInputValues(inputValues = {}, fields = []) {
+  const values = {}
+  fields.forEach((field) => {
+    const rawValue = inputValues && Object.prototype.hasOwnProperty.call(inputValues, field.key)
+      ? inputValues[field.key]
+      : ''
+    let value = String(rawValue || '').trim()
+    if (field.maxLength > 0 && value.length > field.maxLength) {
+      value = value.slice(0, field.maxLength)
+    }
+    values[field.key] = value
+  })
+  return values
+}
+
+function escapeRegExp(value = '') {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function compilePrompt(prompt = '', fields = [], inputValues = {}) {
+  let compiled = String(prompt || '')
+  fields.forEach((field) => {
+    const pattern = new RegExp(`\\{${escapeRegExp(field.key)}\\}`, 'g')
+    compiled = compiled.replace(pattern, inputValues[field.key] || '')
+  })
+  return compiled
 }
 
 function getObjectKeyFromFileID(fileID = '') {
@@ -415,6 +468,248 @@ async function createFeature(payload) {
   if (!payload || !payload.name) return failure('BAD_REQUEST', '缺少卡片名称')
   if (!payload.model_call_id) return failure('BAD_REQUEST', '请选择模型')
   return createDoc(COLLECTIONS.features, payload, FEATURE_FIELDS)
+}
+
+function normalizeFeaturePayload(payload = {}) {
+  const data = pickFields(payload || {}, FEATURE_FIELDS)
+  const templateType = normalizeTemplateType(data.template_type)
+  data.template_type = templateType
+  data.enable_upscale_print = !!data.enable_upscale_print
+  data.upload_count = templateType === TEMPLATE_TYPE_TEXT ? 0 : Math.max(normalizeNumber(data.upload_count, 1), 1)
+  data.input_fields = templateType === TEMPLATE_TYPE_TEXT ? normalizeInputFields(data.input_fields) : []
+  data.points_cost = normalizeNumber(data.points_cost, 0)
+  data.hang_count = normalizeNumber(data.hang_count, 0)
+  data.la_count = normalizeNumber(data.la_count, 0)
+  data.status = normalizeNumber(data.status, 0)
+  data.sort = normalizeNumber(data.sort, 10)
+  data.tag = data.tag || 'normal'
+  return data
+}
+
+function validateFeatureForGeneration(feature = {}, imageUrls = [], inputValues = {}) {
+  if (!feature.name) return failure('BAD_REQUEST', '缺少卡片名称')
+  if (!feature.model_call_id) return failure('BAD_REQUEST', '请选择模型')
+  if (!feature.prompt || !String(feature.prompt).trim()) return failure('BAD_REQUEST', '提示词不能为空')
+
+  const templateType = normalizeTemplateType(feature.template_type)
+  if (templateType === TEMPLATE_TYPE_IMAGE && (!imageUrls || imageUrls.length === 0)) {
+    return failure('BAD_REQUEST', '请上传调试参考图')
+  }
+
+  if (templateType === TEMPLATE_TYPE_TEXT) {
+    const fields = normalizeInputFields(feature.input_fields)
+    if (fields.length === 0) return failure('BAD_REQUEST', '文生图模板缺少动态字段')
+    const values = normalizeInputValues(inputValues, fields)
+    for (let index = 0; index < fields.length; index += 1) {
+      const field = fields[index]
+      if (field.required && !values[field.key]) {
+        return failure('BAD_REQUEST', `请填写${field.title || field.key}`)
+      }
+    }
+  }
+
+  return null
+}
+
+async function getModelByCallId(modelCallId = '') {
+  if (!modelCallId) return null
+  const res = await db.collection(COLLECTIONS.models).where({ model_call_id: modelCallId }).limit(1).get()
+  return res.data && res.data[0] ? res.data[0] : null
+}
+
+async function validateModelCompatibility(feature = {}) {
+  const templateType = normalizeTemplateType(feature.template_type)
+  const modelConfig = await getModelByCallId(feature.model_call_id)
+  if (!modelConfig) return failure('BAD_REQUEST', '模型配置不存在')
+  if (templateType === TEMPLATE_TYPE_TEXT && !TEXT_TO_IMAGE_PROVIDERS.includes(modelConfig.provider)) {
+    return failure('BAD_REQUEST', '当前模型不支持文生图')
+  }
+
+  if (feature.fallback_model_call_id) {
+    const fallbackConfig = await getModelByCallId(feature.fallback_model_call_id)
+    if (!fallbackConfig) return failure('BAD_REQUEST', '兜底模型配置不存在')
+    if (templateType === TEMPLATE_TYPE_TEXT && !TEXT_TO_IMAGE_PROVIDERS.includes(fallbackConfig.provider)) {
+      return failure('BAD_REQUEST', '兜底模型不支持文生图')
+    }
+  }
+
+  return null
+}
+
+async function saveFeatureDraft(payload = {}, caller = {}) {
+  const feature = normalizeFeaturePayload({ ...(payload.data || payload), status: 0 })
+  if (!feature.name) return failure('BAD_REQUEST', '缺少卡片名称')
+  if (!feature.model_call_id) return failure('BAD_REQUEST', '请选择模型')
+
+  if (!payload.id) {
+    return createDoc(COLLECTIONS.features, feature, FEATURE_FIELDS)
+  }
+
+  const currentRes = await db.collection(COLLECTIONS.features).doc(payload.id).get()
+  const current = currentRes.data
+  if (!current) return failure('NOT_FOUND', '卡片不存在')
+
+  if (normalizeNumber(current.status, 0) === 1) {
+    await db.collection(COLLECTIONS.features).doc(payload.id).update({
+      data: {
+        draft_data: feature,
+        has_draft: true,
+        draft_updatedAt: now(),
+        draftBy: caller.uid || ''
+      }
+    })
+    return success({ id: payload.id, savedAsDraft: true })
+  }
+
+  const data = { ...feature, status: 0, updatedAt: now() }
+  await db.collection(COLLECTIONS.features).doc(payload.id).update({ data })
+  return success({ id: payload.id, savedAsDraft: true })
+}
+
+async function publishFeature(payload = {}, caller = {}) {
+  const id = payload.id || ''
+  const source = payload.data ? normalizeFeaturePayload({ ...payload.data, status: 1 }) : null
+  if (source && !source.name) return failure('BAD_REQUEST', '缺少卡片名称')
+  if (source && !source.model_call_id) return failure('BAD_REQUEST', '请选择模型')
+
+  if (!id) {
+    if (!source) return failure('BAD_REQUEST', '缺少发布数据')
+    const res = await createDoc(COLLECTIONS.features, {
+      ...source,
+      status: 1,
+      publishedAt: now(),
+      publishedBy: caller.uid || ''
+    }, FEATURE_FIELDS.concat(FEATURE_DRAFT_FIELDS))
+    return success({ _id: res._id, published: true })
+  }
+
+  const currentRes = await db.collection(COLLECTIONS.features).doc(id).get()
+  const current = currentRes.data
+  if (!current) return failure('NOT_FOUND', '卡片不存在')
+  const publishData = source || normalizeFeaturePayload({ ...(current.draft_data || current), status: 1 })
+  if (!publishData.name) return failure('BAD_REQUEST', '缺少卡片名称')
+  if (!publishData.model_call_id) return failure('BAD_REQUEST', '请选择模型')
+
+  await db.collection(COLLECTIONS.features).doc(id).update({
+    data: {
+      ...publishData,
+      status: 1,
+      draft_data: _.remove(),
+      has_draft: false,
+      draft_updatedAt: _.remove(),
+      draftBy: _.remove(),
+      publishedAt: now(),
+      publishedBy: caller.uid || '',
+      updatedAt: now()
+    }
+  })
+  return success({ id, published: true })
+}
+
+async function debugFeatureGeneration(payload = {}, caller = {}) {
+  const feature = normalizeFeaturePayload(payload.feature || payload.data || {})
+  const imageUrls = Array.isArray(payload.imageUrls) ? payload.imageUrls.filter(Boolean) : []
+  const inputFields = normalizeInputFields(feature.input_fields)
+  const inputValues = normalizeInputValues(payload.inputValues || {}, inputFields)
+  const validationError = validateFeatureForGeneration(feature, imageUrls, inputValues)
+  if (validationError) return validationError
+  const modelError = await validateModelCompatibility(feature)
+  if (modelError) return modelError
+
+  const templateType = normalizeTemplateType(feature.template_type)
+  const compiledPrompt = templateType === TEMPLATE_TYPE_TEXT
+    ? compilePrompt(feature.prompt || '', inputFields, inputValues)
+    : (feature.prompt || '')
+  if (!compiledPrompt.trim()) return failure('BAD_REQUEST', '编译后的提示词不能为空')
+
+  const taskRes = await db.collection(COLLECTIONS.generationTasks).add({
+    data: {
+      _openid: `admin:${caller.uid || caller.openid || 'unknown'}`,
+      source: 'admin_debug',
+      adminUid: caller.uid || '',
+      featureId: payload.featureId || payload.id || '',
+      status: 'pending',
+      imageUrls,
+      promptSnapshot: feature.prompt || '',
+      compiledPrompt,
+      inputValues,
+      inputFields,
+      templateType,
+      modelCallIdSnapshot: feature.model_call_id || '',
+      fallbackModelCallIdSnapshot: feature.fallback_model_call_id || '',
+      activeModelRole: 'primary',
+      fallbackUsed: false,
+      fallbackErrorMessage: '',
+      featureNameSnapshot: feature.name || '后台调试生图',
+      enableUpscalePrintSnapshot: !!feature.enable_upscale_print,
+      pointsCost: 0,
+      pointsDeducted: false,
+      pointsRefunded: false,
+      upstreamTaskId: '',
+      upstreamStatus: '',
+      resultUrl: '',
+      errorMessage: '',
+      historyId: '',
+      createdAt: now(),
+      startedAt: null,
+      finishedAt: null
+    }
+  })
+
+  cloud.callFunction({
+    name: 'generationWorker',
+    data: { taskId: taskRes._id }
+  }).catch((err) => {
+    console.error('[adminApi] debug generation worker trigger failed', taskRes._id, err)
+  })
+
+  return success({ taskId: taskRes._id, compiledPrompt })
+}
+
+async function getDebugGenerationStatus(payload = {}, caller = {}) {
+  const taskId = payload.taskId || ''
+  if (!taskId) return failure('BAD_REQUEST', '缺少 taskId')
+  const taskRes = await db.collection(COLLECTIONS.generationTasks).doc(taskId).get()
+  const task = taskRes.data
+  if (!task) return failure('NOT_FOUND', '调试任务不存在')
+  if (task.source !== 'admin_debug') return failure('FORBIDDEN', '不是后台调试任务')
+  if (task.adminUid && task.adminUid !== caller.uid) return failure('FORBIDDEN', '无权查看该调试任务')
+
+  if (task.status === 'pending' || task.status === 'running') {
+    cloud.callFunction({
+      name: 'generationWorker',
+      data: { taskId }
+    }).catch((err) => {
+      console.error('[adminApi] debug generation worker ensure failed', taskId, err)
+    })
+  }
+
+  let resultTempUrl = ''
+  if (task.resultUrl) {
+    const tempRes = await cloud.getTempFileURL({ fileList: [task.resultUrl] }).catch(() => null)
+    resultTempUrl = tempRes && tempRes.fileList && tempRes.fileList[0] && tempRes.fileList[0].tempFileURL || ''
+  }
+
+  return success({
+    task: {
+      taskId,
+      status: task.status || 'pending',
+      upstreamStatus: task.upstreamStatus || '',
+      resultUrl: task.resultUrl || '',
+      resultTempUrl,
+      historyId: task.historyId || '',
+      errorMessage: task.errorMessage || '',
+      compiledPrompt: task.compiledPrompt || task.promptSnapshot || '',
+      provider: task.provider || '',
+      modelCallId: task.modelCallId || task.modelCallIdSnapshot || '',
+      fallbackUsed: !!task.fallbackUsed,
+      primaryErrorMessage: task.primaryErrorMessage || '',
+      executionDurationMs: task.executionDurationMs || task.lastExecutionDurationMs || 0,
+      totalDurationMs: task.totalDurationMs || 0,
+      createdAt: task.createdAt || null,
+      finishedAt: task.finishedAt || null
+    }
+  })
 }
 
 async function listImages(payload) {
@@ -884,6 +1179,14 @@ async function dispatch(action, payload, caller) {
       return createFeature(payload)
     case 'updateFeature':
       return updateDoc(COLLECTIONS.features, payload, FEATURE_FIELDS)
+    case 'saveFeatureDraft':
+      return saveFeatureDraft(payload, caller)
+    case 'publishFeature':
+      return publishFeature(payload, caller)
+    case 'debugFeatureGeneration':
+      return debugFeatureGeneration(payload, caller)
+    case 'getDebugGenerationStatus':
+      return getDebugGenerationStatus(payload, caller)
     case 'deleteFeature':
       return deleteDoc(COLLECTIONS.features, payload)
     case 'listImages':

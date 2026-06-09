@@ -48,5 +48,26 @@
     </view>
   </view>
 
+  <view wx:if="{{showSavePanel}}" class="share-panel-mask" catchtap="closeSavePanel">
+    <view class="share-panel" catchtap="noop">
+      <view class="share-panel-title">选择保存版本</view>
+      <view class="share-panel-item {{isUpscaling || isSavingImage ? 'disabled' : ''}}" bindtap="saveUpscaledFromPanel">
+        <text class="share-panel-icon">🖨️</text>
+        <view class="save-panel-text">
+          <text class="share-panel-text">高清可打印版</text>
+          <text class="save-panel-desc">{{upscaledUrl ? '已生成，直接保存' : upscalePointsCost + ' 星光/张，适合海报打印'}}</text>
+        </view>
+      </view>
+      <view class="share-panel-item {{isUpscaling || isSavingImage ? 'disabled' : ''}}" bindtap="saveOriginalFromPanel">
+        <text class="share-panel-icon">🖼️</text>
+        <view class="save-panel-text">
+          <text class="share-panel-text">普通原图版</text>
+          <text class="save-panel-desc">保存当前生成图片</text>
+        </view>
+      </view>
+      <view class="share-panel-cancel {{isUpscaling || isSavingImage ? 'disabled' : ''}}" bindtap="closeSavePanel">取消</view>
+    </view>
+  </view>
+
   <canvas class="poster-canvas" id="sharePosterCanvas" type="2d"></canvas>
 </view>

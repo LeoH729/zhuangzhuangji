@@ -254,6 +254,8 @@ async function processTask(taskId) {
     const historyRes = await db.collection('generation_history').add({
       data: {
         _openid: task._openid,
+        source: task.source || '',
+        adminUid: task.adminUid || '',
         featureId: task.featureId || '',
         featureName: task.featureNameSnapshot || '',
         generationMode: 'worker',
@@ -269,6 +271,7 @@ async function processTask(taskId) {
         templateType: task.templateType || 'image_to_image',
         resultUrl: resultImageUrl,
         pointsCost: task.pointsCost || 0,
+        enableUpscalePrint: !!task.enableUpscalePrintSnapshot,
         taskId: task._id,
         upstreamTaskId: execResult.upstreamTaskId || task.upstreamTaskId || '',
         upstreamStatus: execResult.upstreamStatus || task.upstreamStatus || '',

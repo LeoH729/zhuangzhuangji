@@ -190,6 +190,7 @@ Page({
 
   onCardTap(e) {
     const item = e.currentTarget.dataset.item;
+    const now = Date.now();
     if (item.status === 'succeeded' && item.historyId) {
       wx.navigateTo({
         url: `/pages/result/result?id=${item.historyId}`
@@ -200,10 +201,29 @@ Page({
         url: `/pages/result/result?url=${encodeURIComponent(item.rawResultUrl)}`
       });
     } else if (item.status === 'failed') {
+      const lastTap = this.lastFailedTaskTap || {};
+      const isDoubleTap = lastTap.id === item.id && now - lastTap.time < 450;
+      this.lastFailedTaskTap = { id: item.id, time: now };
+      if (!isDoubleTap) return;
+
+      const errorMessage = item.errorMessage || '未知生图失败，请重试';
       wx.showModal({
         title: '生成任务失败',
-        content: item.errorMessage || '未知生图失败，请重试',
-        showCancel: false
+        content: errorMessage,
+        cancelText: '关闭',
+        confirmText: '复制',
+        success: (res) => {
+          if (!res.confirm) return;
+          wx.setClipboardData({
+            data: errorMessage,
+            success: () => {
+              wx.showToast({ title: '已复制', icon: 'success' });
+            },
+            fail: () => {
+              wx.showToast({ title: '复制失败', icon: 'none' });
+            }
+          });
+        }
       });
     }
   },
