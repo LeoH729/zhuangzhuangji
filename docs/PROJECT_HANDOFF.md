@@ -260,7 +260,7 @@ function resolveImageSize(modelConfig = {}, fallback = '1024x1024') {
 注意：
 
 - V1.4.1 后台支持文生图模板字段。
-- `FEATURE_FIELDS` 当前不包含模板 `size`，避免从模板层写入 size。
+- `FEATURE_FIELDS` 包含 ToAPIs 专用卡片比例 `size`；仅当主模型或兜底模型 provider 为 `toapis` 时后台显示，允许 `1:1`、`3:4`、`9:16`。
 - 后台登录通过 CloudBase Auth / 管理员白名单集合 `admin_users`。
 
 ### `points`
@@ -522,4 +522,3 @@ Invoke-WebRequest -Uri https://makedream-admin.supersolo.tech/admin/index.html -
    - `cloudfunctions/adminApi/index.js`
    - 相关数据库字段
 7. 对线上问题先查 CloudBase 函数日志，不要只看前端提示。
-

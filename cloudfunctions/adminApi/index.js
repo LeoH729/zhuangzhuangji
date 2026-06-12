@@ -35,6 +35,7 @@ const COLLECTIONS = {
 const TEMPLATE_TYPE_IMAGE = 'image_to_image'
 const TEMPLATE_TYPE_TEXT = 'text_to_image'
 const TEXT_TO_IMAGE_PROVIDERS = ['volcengine', 'supersolo', 'supersolo_async', 'toapis', 'joapi']
+const TOAPIS_SIZE_OPTIONS = ['1:1', '3:4', '9:16']
 
 const MODEL_FIELDS = [
   'model_call_id',
@@ -59,6 +60,7 @@ const FEATURE_FIELDS = [
   'enable_upscale_print',
   'hang_count',
   'la_count',
+  'size',
   'model_call_id',
   'fallback_model_call_id',
   'prompt',
@@ -102,6 +104,11 @@ function cleanPrefix(prefix = '') {
 
 function normalizeTemplateType(value) {
   return value === TEMPLATE_TYPE_TEXT ? TEMPLATE_TYPE_TEXT : TEMPLATE_TYPE_IMAGE
+}
+
+function normalizeToapisSize(value = '') {
+  const size = String(value || '').trim()
+  return TOAPIS_SIZE_OPTIONS.includes(size) ? size : ''
 }
 
 function normalizeInputFields(fields = []) {
@@ -480,6 +487,7 @@ function normalizeFeaturePayload(payload = {}) {
   data.points_cost = normalizeNumber(data.points_cost, 0)
   data.hang_count = normalizeNumber(data.hang_count, 0)
   data.la_count = normalizeNumber(data.la_count, 0)
+  data.size = normalizeToapisSize(data.size)
   data.status = normalizeNumber(data.status, 0)
   data.sort = normalizeNumber(data.sort, 10)
   data.tag = data.tag || 'normal'
@@ -637,6 +645,7 @@ async function debugFeatureGeneration(payload = {}, caller = {}) {
       templateType,
       modelCallIdSnapshot: feature.model_call_id || '',
       fallbackModelCallIdSnapshot: feature.fallback_model_call_id || '',
+      sizeSnapshot: feature.size || '',
       activeModelRole: 'primary',
       fallbackUsed: false,
       fallbackErrorMessage: '',
@@ -733,6 +742,28 @@ async function listImages(payload) {
   return result
 }
 
+async function listAllImageAssetRefs() {
+  const refs = []
+  const limit = 100
+  let skip = 0
+  while (true) {
+    const res = await db.collection(COLLECTIONS.images)
+      .field({ objectKey: true, cloudPath: true, fileID: true, createdAt: true, updatedAt: true })
+      .skip(skip)
+      .limit(limit)
+      .get()
+    const rows = res.data || []
+    refs.push(...rows)
+    skip += rows.length
+    if (rows.length < limit) break
+  }
+  return refs
+}
+
+function getImageAssetIdentity(item = {}) {
+  return cleanPrefix(item.objectKey || item.cloudPath || getObjectKeyFromFileID(item.fileID || ''))
+}
+
 async function createImageAsset(payload) {
   if (!payload || !payload.fileID) return failure('BAD_REQUEST', '缺少 fileID')
   const data = pickFields(payload, IMAGE_FIELDS)
@@ -746,6 +777,15 @@ async function createImageAsset(payload) {
   data.lastModified = data.lastModified || new Date().toISOString()
   data.createdAt = now()
   data.updatedAt = now()
+
+  const existingRes = await db.collection(COLLECTIONS.images).where({ objectKey }).limit(1).get()
+  const existing = existingRes.data && existingRes.data[0]
+  if (existing) {
+    delete data.createdAt
+    await db.collection(COLLECTIONS.images).doc(existing._id).update({ data })
+    return success({ _id: existing._id, updatedExisting: true })
+  }
+
   const res = await db.collection(COLLECTIONS.images).add({ data })
   return success({ _id: res._id })
 }
@@ -814,10 +854,11 @@ async function listStorageObjects(prefix = '') {
 async function syncStorageAssets(payload = {}) {
   const prefix = cleanPrefix(payload.prefix || '')
   const objects = await listStorageObjects(prefix)
-  const existingRes = await db.collection(COLLECTIONS.images).field({ objectKey: true }).limit(1000).get()
+  const existingRes = { data: await listAllImageAssetRefs() }
   const existingMap = {}
   ;(existingRes.data || []).forEach((item) => {
-    if (item.objectKey) existingMap[item.objectKey] = item._id
+    const objectKey = getImageAssetIdentity(item)
+    if (objectKey && !existingMap[objectKey]) existingMap[objectKey] = item._id
   })
   let created = 0
   let updated = 0
@@ -890,6 +931,19 @@ async function getImageReferences(fileID) {
   return refs.data || []
 }
 
+async function countImageAssetRefs(asset = {}) {
+  const conditions = []
+  const objectKey = getImageAssetIdentity(asset)
+  if (asset.fileID) conditions.push({ fileID: asset.fileID })
+  if (objectKey) {
+    conditions.push({ objectKey })
+    conditions.push({ cloudPath: objectKey })
+  }
+  if (conditions.length === 0) return 0
+  const res = await db.collection(COLLECTIONS.images).where(_.or(conditions)).count()
+  return res.total || 0
+}
+
 async function deleteImageAsset(payload = {}) {
   if (!payload.id) return failure('BAD_REQUEST', '缺少图片资源 ID')
   const doc = await db.collection(COLLECTIONS.images).doc(payload.id).get()
@@ -901,9 +955,12 @@ async function deleteImageAsset(payload = {}) {
     return failure('IMAGE_IN_USE', '图片正在被卡片引用，不能直接删除', { refs })
   }
 
-  if (asset.fileID) {
+  const sameFileRefCount = await countImageAssetRefs(asset)
+  const shouldDeleteStorageFile = sameFileRefCount <= 1
+
+  if (shouldDeleteStorageFile && asset.fileID) {
     await cloud.deleteFile({ fileList: [asset.fileID] })
-  } else if (asset.objectKey) {
+  } else if (shouldDeleteStorageFile && asset.objectKey) {
     await cosRequest('deleteObject', {
       Bucket: STORAGE_BUCKET,
       Region: STORAGE_REGION,
@@ -911,7 +968,7 @@ async function deleteImageAsset(payload = {}) {
     })
   }
   await db.collection(COLLECTIONS.images).doc(payload.id).remove()
-  return success()
+  return success({ storageDeleted: shouldDeleteStorageFile, sameFileRefCount })
 }
 
 async function listUsers(payload) {

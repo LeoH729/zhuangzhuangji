@@ -64,6 +64,68 @@ async function resolveHttpImageUrl(cloud, imageUrls) {
   return fileID
 }
 
+function summarizeUrl(rawUrl = '') {
+  const value = String(rawUrl || '').trim()
+  if (!value) {
+    return { hasUrl: false }
+  }
+  try {
+    const parsed = new URL(value)
+    return {
+      hasUrl: true,
+      protocol: parsed.protocol.replace(':', ''),
+      host: parsed.host,
+      path: parsed.pathname.slice(0, 160)
+    }
+  } catch (err) {
+    return {
+      hasUrl: true,
+      protocol: '',
+      host: '',
+      path: value.slice(0, 80),
+      parseError: err && err.message
+    }
+  }
+}
+
+async function logReferenceImageDiagnostics(provider, modelConfig, imageUrl, payload) {
+  const summary = summarizeUrl(imageUrl)
+  const fields = Object.keys(payload || {}).filter(key => key !== 'prompt')
+  const baseInfo = {
+    provider,
+    modelCallId: modelConfig && modelConfig.model_call_id,
+    modelId: modelConfig && modelConfig.model_id,
+    hasReferenceImage: !!imageUrl,
+    referenceImage: summary,
+    payloadFields: fields
+  }
+
+  if (!imageUrl || !String(imageUrl).startsWith('http')) {
+    console.warn('[generationExecutor] reference image diagnostic skipped', baseInfo)
+    return
+  }
+
+  try {
+    const response = await axios.head(imageUrl, {
+      timeout: STATUS_REQUEST_TIMEOUT_MS,
+      maxRedirects: 5,
+      validateStatus: () => true
+    })
+    console.log('[generationExecutor] reference image diagnostic', {
+      ...baseInfo,
+      headStatus: response.status,
+      contentType: response.headers && response.headers['content-type'],
+      contentLength: response.headers && response.headers['content-length']
+    })
+  } catch (err) {
+    console.warn('[generationExecutor] reference image diagnostic failed', {
+      ...baseInfo,
+      error: err && err.message,
+      code: err && err.code
+    })
+  }
+}
+
 async function uploadRemoteUrlToCloud(cloud, imageUrl) {
   let targetUrl = imageUrl || ''
   if (targetUrl.includes('via.placeholder.com')) {
@@ -224,12 +286,24 @@ async function callSupersoloImageGeneration(cloud, modelConfig, feature, httpIma
     size: resolveImageSize(modelConfig, '1024x1024')
   }
 
-  if (!isGptImageModel(modelConfig)) {
+  if (isGptImageModel(modelConfig)) {
+    payload.resolution = '2K'
+    payload.response_format = 'url'
+  } else {
     payload.response_format = 'b64_json'
   }
 
   if (httpImageUrl) {
-    payload.image = httpImageUrl
+    if (isGptImageModel(modelConfig)) {
+      payload.reference_images = [httpImageUrl]
+      payload.image_urls = [httpImageUrl]
+    } else {
+      payload.image = httpImageUrl
+    }
+  }
+
+  if (isGptImageModel(modelConfig)) {
+    await logReferenceImageDiagnostics('supersolo', modelConfig, httpImageUrl, payload)
   }
 
   const response = await axios.post(
@@ -259,28 +333,23 @@ async function callSupersoloImageGeneration(cloud, modelConfig, feature, httpIma
 }
 
 async function callSupersoloGptImageEdit(cloud, modelConfig, feature, httpImageUrl) {
-  const imageFile = await downloadImageBuffer(httpImageUrl)
-  const form = new FormData()
-  form.append('model', modelConfig.model_id)
-  form.append('prompt', feature.prompt || '')
-  form.append('n', String(modelConfig.n || 1))
-  form.append('size', 'auto')
-  form.append('image', imageFile.buffer, {
-    filename: `reference.${imageFile.extension}`,
-    contentType: imageFile.contentType
-  })
-
+  const payload = {
+    model: modelConfig.model_id,
+    prompt: feature.prompt || '',
+    n: Number(modelConfig.n || 1),
+    size: 'auto',
+    images: [
+      {
+        image_url: httpImageUrl
+      }
+    ]
+  }
+  await logReferenceImageDiagnostics('supersolo_edits', modelConfig, httpImageUrl, payload)
   const baseUrl = normalizeBaseUrl(modelConfig.base_url)
   const response = await axios.post(
     `${baseUrl}/images/edits`,
-    form,
-    {
-      headers: {
-        ...form.getHeaders(),
-        Authorization: `Bearer ${modelConfig.api_key}`
-      },
-      timeout: REQUEST_TIMEOUT_MS
-    }
+    payload,
+    buildRequestConfig(modelConfig)
   )
 
   const proxyRes = response.data
@@ -421,7 +490,10 @@ function parseToapisResultUrl(taskRes) {
     ? taskRes.result.data
     : []
   const nestedUrl = resultData[0] && resultData[0].url
-  return nestedUrl || taskRes.url || ''
+  const dataUrl = taskRes && Array.isArray(taskRes.data) && taskRes.data[0]
+    ? taskRes.data[0].url
+    : ''
+  return nestedUrl || dataUrl || taskRes.url || taskRes.result_url || ''
 }
 
 function isToapisPendingStatus(status = '') {
@@ -430,6 +502,20 @@ function isToapisPendingStatus(status = '') {
 
 function isToapisCompletedStatus(status = '') {
   return ['completed', 'succeeded', 'success'].includes(String(status).toLowerCase())
+}
+
+const TOAPIS_SIZE_OPTIONS = ['1:1', '3:4', '9:16']
+
+function resolveToapisSize(modelConfig = {}, feature = {}) {
+  const featureSize = String(feature.size || '').trim()
+  if (TOAPIS_SIZE_OPTIONS.includes(featureSize)) {
+    return featureSize
+  }
+  const modelSize = String(modelConfig.size || '').trim()
+  if (TOAPIS_SIZE_OPTIONS.includes(modelSize)) {
+    return modelSize
+  }
+  return '1:1'
 }
 
 async function fetchToapisTaskStatus(modelConfig, taskId) {
@@ -452,10 +538,13 @@ async function createToapisTask(cloud, modelConfig, feature, imageUrls, options 
     model: modelConfig.model_id,
     prompt: feature.prompt || '',
     n: 1,
-    size: resolveImageSize(modelConfig, '1:1')
+    size: resolveToapisSize(modelConfig, feature),
+    resolution: '2K',
+    response_format: 'url'
   }
 
   if (httpImageUrl) {
+    payload.reference_images = [httpImageUrl]
     payload.image_urls = [httpImageUrl]
   }
   if (options.clientBusinessId) {
@@ -600,6 +689,10 @@ async function callSupersoloAsync(cloud, modelConfig, feature, imageUrls, option
 }
 
 async function executeGeneration(cloud, modelConfig, feature, imageUrls, options = {}) {
+  if (modelConfig.provider === 'toapis') {
+    return callToapis(cloud, modelConfig, feature, imageUrls, options)
+  }
+
   if (isGeminiImageModel(modelConfig) || isGptImageModel(modelConfig)) {
     return callSupersolo(cloud, modelConfig, feature, imageUrls)
   }

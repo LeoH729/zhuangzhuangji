@@ -51,25 +51,31 @@ POST {base_url}/images/generations
 
 ### 3.2 GPT Image 2 图生图
 
-GPT Image 2 图生图必须与文生图区分，走 OpenAI 编辑接口：
+GPT Image 2 图生图走编辑接口，并使用 JSON 请求体传参考图 URL：
 
 ```http
 POST {base_url}/images/edits
 Authorization: Bearer <solo-api-key>
-Content-Type: multipart/form-data
+Content-Type: application/json
 ```
 
-表单字段：
+请求体：
 
-```text
-model = gpt-image-2
-prompt = 保留主体，改成节日海报风格...
-n = 1
-size = auto
-image = <参考图二进制文件>
+```json
+{
+  "model": "gpt-image-2",
+  "prompt": "保留主体，改成节日海报风格...",
+  "n": 1,
+  "size": "auto",
+  "images": [
+    {
+      "image_url": "<参考图 HTTPS 临时链接>"
+    }
+  ]
+}
 ```
 
-旧的 `/images/generations + image URL` 属于中转站自定义兼容层，容易被上游当作普通文生图处理，不再作为 GPT Image 2 图生图主路径。
+注意：当前项目不使用 multipart 上传参考图，而是依赖自建中转站支持 `/images/edits + application/json + images[].image_url`。
 
 ### 3.3 Gemini 文生图 / 图生图
 

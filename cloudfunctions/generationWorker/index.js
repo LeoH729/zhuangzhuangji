@@ -190,6 +190,7 @@ async function processTask(taskId) {
     const featureSnapshot = {
       name: task.featureNameSnapshot || '',
       prompt: task.compiledPrompt || task.promptSnapshot || '',
+      size: task.sizeSnapshot || '',
       points_cost: task.pointsCost || 0
     }
 
@@ -269,6 +270,7 @@ async function processTask(taskId) {
         inputValues: task.inputValues || {},
         compiledPrompt: task.compiledPrompt || task.promptSnapshot || '',
         templateType: task.templateType || 'image_to_image',
+        size: task.sizeSnapshot || '',
         resultUrl: resultImageUrl,
         pointsCost: task.pointsCost || 0,
         enableUpscalePrint: !!task.enableUpscalePrintSnapshot,

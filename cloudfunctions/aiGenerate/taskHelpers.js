@@ -228,6 +228,7 @@ async function createTask(openid, featureId, imageUrls, inputValues = {}) {
       templateType,
       modelCallIdSnapshot: feature.model_call_id || '',
       fallbackModelCallIdSnapshot: fallbackModelCallId,
+      sizeSnapshot: feature.size || '',
       activeModelRole: 'primary',
       fallbackUsed: false,
       fallbackErrorMessage: '',

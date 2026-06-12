@@ -6,6 +6,7 @@ import {
   ArrowUpDown,
   Copy,
   Database,
+  Download,
   FolderTree,
   Image,
   Loader2,
@@ -68,6 +69,7 @@ const EMPTY_FEATURE = {
   enable_upscale_print: false,
   hang_count: 0,
   la_count: 0,
+  size: '',
   model_call_id: '',
   fallback_model_call_id: '',
   prompt: '',
@@ -85,6 +87,7 @@ const FEATURE_STATUS_LABELS = {
   1: '已发布'
 }
 const TEXT_TO_IMAGE_PROVIDERS = ['volcengine', 'supersolo', 'supersolo_async', 'toapis', 'joapi']
+const TOAPIS_SIZE_OPTIONS = ['1:1', '3:4', '9:16']
 const EMPTY_ADMIN = {
   uid: '',
   openid: '',
@@ -421,12 +424,14 @@ function ImagesPanel() {
   const [selectedIds, setSelectedIds] = useState([])
   const [uploadResult, setUploadResult] = useState(null)
   const [previewAsset, setPreviewAsset] = useState(null)
+  const [downloading, setDownloading] = useState(false)
 
   useEffect(() => {
     setSelectedIds([])
   }, [folder, sort.sortBy, sort.sortOrder])
 
   const allVisibleSelected = items.length > 0 && items.every((item) => selectedIds.includes(item._id))
+  const selectedAssets = items.filter((item) => selectedIds.includes(item._id))
 
   const toggleAllVisible = () => {
     setSelectedIds(allVisibleSelected ? [] : items.map((item) => item._id))
@@ -524,6 +529,38 @@ function ImagesPanel() {
     await reload()
   }
 
+  const getDownloadName = (item = {}, index = 0) => {
+    const rawPath = item.objectKey || item.cloudPath || ''
+    const rawName = item.name || rawPath || `image_${index + 1}`
+    const fallbackExt = rawPath.includes('.') ? rawPath.slice(rawPath.lastIndexOf('.')) : '.jpg'
+    const name = String(rawName).split('/').pop().replace(/[\\/:*?"<>|]/g, '_') || `image_${index + 1}${fallbackExt}`
+    return name.includes('.') ? name : `${name}${fallbackExt}`
+  }
+
+  const downloadSelected = () => {
+    if (selectedAssets.length === 0 || downloading) return
+    const downloadable = selectedAssets.filter((item) => item.temporaryUrl || item.fileID)
+    if (downloadable.length === 0) {
+      window.alert('选中的图片暂无可下载链接，请先刷新列表后重试。')
+      return
+    }
+
+    setDownloading(true)
+    downloadable.forEach((item, index) => {
+      window.setTimeout(() => {
+        const link = document.createElement('a')
+        link.href = item.temporaryUrl || item.fileID
+        link.download = getDownloadName(item, index)
+        link.target = '_blank'
+        link.rel = 'noopener noreferrer'
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      }, index * 250)
+    })
+    window.setTimeout(() => setDownloading(false), Math.max(downloadable.length, 1) * 250)
+  }
+
   const edit = (item) => {
     setEditingId(item._id)
     setForm({ ...EMPTY_IMAGE, ...item })
@@ -589,10 +626,16 @@ function ImagesPanel() {
         onRefresh={reload}
         pagination={pagination}
         actions={(
-          <button className="secondary-button danger" type="button" onClick={removeSelected} disabled={selectedIds.length === 0}>
-            <Trash2 size={16} />
-            批量删除{selectedIds.length ? `(${selectedIds.length})` : ''}
-          </button>
+          <>
+            <button className="secondary-button" type="button" onClick={downloadSelected} disabled={selectedAssets.length === 0 || downloading}>
+              {downloading ? <Loader2 className="spin" size={16} /> : <Download size={16} />}
+              批量下载{selectedAssets.length ? `(${selectedAssets.length})` : ''}
+            </button>
+            <button className="secondary-button danger" type="button" onClick={removeSelected} disabled={selectedIds.length === 0}>
+              <Trash2 size={16} />
+              批量删除{selectedIds.length ? `(${selectedIds.length})` : ''}
+            </button>
+          </>
         )}
       >
         <thead><tr>
@@ -692,6 +735,15 @@ function normalizeFeatureForm(form = {}) {
 
 function getSelectedModel(models = [], modelCallId = '') {
   return (models || []).find((item) => item.model_call_id === modelCallId) || null
+}
+
+function normalizeToapisSize(value = '') {
+  const size = String(value || '').trim()
+  return TOAPIS_SIZE_OPTIONS.includes(size) ? size : '1:1'
+}
+
+function usesToapisProvider(primaryModel, fallbackModel) {
+  return primaryModel?.provider === 'toapis' || fallbackModel?.provider === 'toapis'
 }
 
 function FeatureDebugPanel({ form, editingId }) {
@@ -877,9 +929,26 @@ function FeaturesPanel() {
   const selectedFallbackModel = getSelectedModel(refs.models || [], form.fallback_model_call_id)
   const textProviderCompatible = !selectedModel || TEXT_TO_IMAGE_PROVIDERS.includes(selectedModel.provider)
   const fallbackTextProviderCompatible = !selectedFallbackModel || TEXT_TO_IMAGE_PROVIDERS.includes(selectedFallbackModel.provider)
+  const showToapisSize = usesToapisProvider(selectedModel, selectedFallbackModel)
+
+  const buildFeaturePayload = (source = form) => {
+    const payload = normalizeFeatureForm(source)
+    const primaryModel = getSelectedModel(refs.models || [], payload.model_call_id)
+    const fallbackModel = getSelectedModel(refs.models || [], payload.fallback_model_call_id)
+    payload.size = usesToapisProvider(primaryModel, fallbackModel) ? normalizeToapisSize(payload.size) : ''
+    return payload
+  }
+
+  const updateModelSelection = (patch = {}) => {
+    const nextForm = { ...form, ...patch }
+    const primaryModel = getSelectedModel(refs.models || [], nextForm.model_call_id)
+    const fallbackModel = getSelectedModel(refs.models || [], nextForm.fallback_model_call_id)
+    nextForm.size = usesToapisProvider(primaryModel, fallbackModel) ? normalizeToapisSize(nextForm.size) : ''
+    setForm(nextForm)
+  }
 
   const saveDraft = async () => {
-    const payload = normalizeFeatureForm(form)
+    const payload = buildFeaturePayload(form)
     setSavingDraft(true)
     setFeatureError('')
     setFeatureMessage('')
@@ -898,7 +967,7 @@ function FeaturesPanel() {
   }
 
   const publish = async () => {
-    const payload = normalizeFeatureForm({ ...form, status: 1 })
+    const payload = buildFeaturePayload({ ...form, status: 1 })
     setPublishing(true)
     setFeatureError('')
     setFeatureMessage('')
@@ -1002,8 +1071,11 @@ function FeaturesPanel() {
       >
         <Field label="名称"><TextInput value={form.name} onChange={(value) => setForm({ ...form, name: value })} /></Field>
         <Field label="分组"><Select value={form.group} onChange={(value) => setForm({ ...form, group: value })} options={(refs.groups || []).map((item) => item.name)} /></Field>
-        <Field label="模型"><Select value={form.model_call_id} onChange={(value) => setForm({ ...form, model_call_id: value })} options={(refs.models || []).map((item) => item.model_call_id)} /></Field>
-        <Field label="兜底模型"><Select value={form.fallback_model_call_id} onChange={(value) => setForm({ ...form, fallback_model_call_id: value })} options={(refs.models || []).map((item) => item.model_call_id)} /></Field>
+        <Field label="模型"><Select value={form.model_call_id} onChange={(value) => updateModelSelection({ model_call_id: value })} options={(refs.models || []).map((item) => item.model_call_id)} /></Field>
+        <Field label="兜底模型"><Select value={form.fallback_model_call_id} onChange={(value) => updateModelSelection({ fallback_model_call_id: value })} options={(refs.models || []).map((item) => item.model_call_id)} /></Field>
+        {showToapisSize ? (
+          <Field label="图片比例"><Select value={normalizeToapisSize(form.size)} onChange={(value) => setForm({ ...form, size: value })} options={TOAPIS_SIZE_OPTIONS} /></Field>
+        ) : null}
         <Field label="模板类型"><Select value={form.template_type} onChange={updateTemplateType} options={['image_to_image', 'text_to_image']} labels={TEMPLATE_TYPE_LABELS} /></Field>
         {form.template_type === 'text_to_image' && selectedFallbackModel && !fallbackTextProviderCompatible ? (
           <div className="form-notice warning">Fallback provider {selectedFallbackModel.provider} is not compatible with text-to-image. Use volcengine, supersolo, supersolo_async, or toapis.</div>
@@ -1039,7 +1111,7 @@ function FeaturesPanel() {
               <button type="button" className="secondary-button" onClick={addInputField}><Plus size={14} />添加字段</button>
             </div>
             {(form.input_fields || []).map((field, index) => (
-              <div className="input-field-row" key={`${field.key}_${index}`}>
+              <div className="input-field-row" key={`input_field_${index}`}>
                 <TextInput placeholder="key，如 category" value={field.key} onChange={(value) => updateInputField(index, { key: value })} />
                 <TextInput placeholder="标题，如 品类" value={field.title} onChange={(value) => updateInputField(index, { title: value })} />
                 <TextInput placeholder="占位文案" value={field.placeholder} onChange={(value) => updateInputField(index, { placeholder: value })} />

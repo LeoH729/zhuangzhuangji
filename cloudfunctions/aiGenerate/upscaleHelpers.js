@@ -11,6 +11,9 @@ const REPLICATE_WAIT_SECONDS = 60
 const REQUEST_TIMEOUT_MS = 70 * 1000
 const DOWNLOAD_TIMEOUT_MS = 120 * 1000
 const RUNNING_TIMEOUT_MS = 10 * 60 * 1000
+const REPLICATE_MAX_INPUT_PIXELS = 2096704
+const REPLICATE_SAFE_INPUT_PIXELS = 1000000
+const DEFAULT_UPSCALE_INPUT_RATIO = { width: 1, height: 1 }
 const MSG_SERVICE_NOT_CONFIGURED = '\u9ad8\u6e05\u670d\u52a1\u672a\u914d\u7f6e\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5'
 const MSG_SERVICE_NO_CREDIT = '\u9ad8\u6e05\u670d\u52a1\u4f59\u989d\u4e0d\u8db3\uff0c\u672c\u6b21\u661f\u5149\u5df2\u9000\u56de\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5'
 const MSG_SERVICE_BUSY = '\u9ad8\u6e05\u670d\u52a1\u6682\u65f6\u4e0d\u53ef\u7528\uff0c\u672c\u6b21\u661f\u5149\u5df2\u9000\u56de\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5'
@@ -49,6 +52,9 @@ function normalizeUpscaleError(err) {
     (responseData && /insufficient credit/i.test(String(responseData.detail || responseData.title || '')))
   ) {
     return MSG_SERVICE_NO_CREDIT
+  }
+  if (/GPU memory|max size|total number of pixels|Resize input image/i.test(message)) {
+    return '\u539f\u56fe\u5c3a\u5bf8\u8d85\u8fc7\u9ad8\u6e05\u670d\u52a1\u5904\u7406\u4e0a\u9650\uff0c\u672c\u6b21\u661f\u5149\u5df2\u9000\u56de\uff0c\u8bf7\u6362\u4e00\u5f20\u7a0d\u5c0f\u7684\u539f\u56fe\u518d\u8bd5'
   }
   if (status === 401 || status === 403) {
     return MSG_SERVICE_NOT_CONFIGURED
@@ -163,6 +169,142 @@ async function resolveHttpImageUrl(cloud, imageUrl = '') {
   const tempRes = await cloud.getTempFileURL({ fileList: [rawUrl] })
   const item = tempRes.fileList && tempRes.fileList[0]
   return (item && item.tempFileURL) || rawUrl
+}
+
+function getUpscaleSafeInputPixels() {
+  const configured = Number(process.env.UPSCALE_INPUT_MAX_PIXELS)
+  if (Number.isFinite(configured) && configured > 0 && configured < REPLICATE_MAX_INPUT_PIXELS) {
+    return Math.floor(configured)
+  }
+  return REPLICATE_SAFE_INPUT_PIXELS
+}
+
+function appendUrlParam(url = '', param = '') {
+  const cleanUrl = String(url || '').trim()
+  const cleanParam = String(param || '').trim().replace(/^[?&]+/, '')
+  if (!cleanUrl || !cleanParam) return cleanUrl
+  const separator = cleanUrl.includes('?') ? '&' : '?'
+  return `${cleanUrl}${separator}${cleanParam}`
+}
+
+function parseSizeRatio(size = '') {
+  const value = String(size || '').trim().toLowerCase()
+  const match = value.match(/(\d+(?:\.\d+)?)\s*[x:*]\s*(\d+(?:\.\d+)?)/)
+  if (!match) return null
+  const width = Number(match[1])
+  const height = Number(match[2])
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return null
+  }
+  return { width, height }
+}
+
+function normalizeDimensionPair(dimensions) {
+  if (!dimensions) return null
+  const width = Number(dimensions.width || dimensions.Width)
+  const height = Number(dimensions.height || dimensions.Height)
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return null
+  }
+  return { width, height }
+}
+
+function calculateInputBox(dimensions, maxPixels = getUpscaleSafeInputPixels()) {
+  const pair = normalizeDimensionPair(dimensions) || DEFAULT_UPSCALE_INPUT_RATIO
+  const ratio = pair.width / pair.height
+  let width = Math.floor(Math.sqrt(maxPixels * ratio))
+  let height = Math.floor(width / ratio)
+
+  while (width * height > maxPixels) {
+    if (width >= height) {
+      width -= 1
+    } else {
+      height -= 1
+    }
+  }
+
+  return {
+    width: Math.max(1, width),
+    height: Math.max(1, height),
+    maxPixels,
+    ratio
+  }
+}
+
+function buildImageMogrThumbnailParam(box) {
+  return `imageMogr2/thumbnail/${box.width}x${box.height}%3E`
+}
+
+async function getRemoteImageInfo(inputUrl) {
+  if (!inputUrl || !String(inputUrl).startsWith('http')) return null
+  const infoUrl = appendUrlParam(inputUrl, 'imageInfo')
+  const response = await axios.get(infoUrl, {
+    timeout: REQUEST_TIMEOUT_MS,
+    validateStatus: () => true
+  })
+  if (response.status < 200 || response.status >= 300) {
+    throw new Error(`imageInfo request failed: ${response.status}`)
+  }
+  const data = response.data || {}
+  return normalizeDimensionPair(data)
+}
+
+function resolveHistoryRatio(history = {}) {
+  return normalizeDimensionPair(history.resultDimensions || history.resultSize)
+    || parseSizeRatio(history.size)
+    || parseSizeRatio(history.sizeSnapshot)
+}
+
+async function getTempUrlForCloudFile(cloud, fileID) {
+  const tempRes = await cloud.getTempFileURL({ fileList: [fileID] })
+  const item = tempRes.fileList && tempRes.fileList[0]
+  return (item && item.tempFileURL) || fileID
+}
+
+async function prepareReplicateInputUrl(cloud, history, imageUrl, timings = {}) {
+  const resolveStartedAt = Date.now()
+  const inputUrl = await resolveHttpImageUrl(cloud, imageUrl)
+  timings.sourceResolveMs = Date.now() - resolveStartedAt
+  if (!inputUrl) return ''
+
+  const configuredParam = String(process.env.UPSCALE_INPUT_PROCESSING || '').trim()
+  if (configuredParam) {
+    timings.inputProcessedBy = 'cloudbase_ci'
+    timings.inputProcessingMode = 'configured_param'
+    timings.inputProcessingParam = configuredParam
+    return appendUrlParam(inputUrl, configuredParam)
+  }
+
+  let dimensions = null
+  const infoStartedAt = Date.now()
+  try {
+    dimensions = await getRemoteImageInfo(inputUrl)
+    timings.sourceImageInfoMs = Date.now() - infoStartedAt
+    if (dimensions) {
+      timings.sourceWidth = dimensions.width
+      timings.sourceHeight = dimensions.height
+      timings.sourcePixels = dimensions.width * dimensions.height
+      timings.inputRatioSource = 'imageInfo'
+    }
+  } catch (err) {
+    timings.sourceImageInfoMs = Date.now() - infoStartedAt
+    timings.sourceImageInfoError = err && err.message ? err.message.slice(0, 160) : String(err)
+  }
+
+  if (!dimensions) {
+    dimensions = resolveHistoryRatio(history)
+    timings.inputRatioSource = dimensions ? 'history_size' : 'default_square'
+  }
+
+  const box = calculateInputBox(dimensions)
+  const processingParam = buildImageMogrThumbnailParam(box)
+  timings.inputProcessedBy = 'cloudbase_ci'
+  timings.inputMaxPixels = box.maxPixels
+  timings.inputTargetWidth = box.width
+  timings.inputTargetHeight = box.height
+  timings.inputTargetPixels = box.width * box.height
+  timings.inputProcessingParam = processingParam
+  return appendUrlParam(inputUrl, processingParam)
 }
 
 function guessImageExtension(contentType = '', url = '') {
@@ -469,9 +611,7 @@ async function ensureUpscaleWorker(cloud, openid, upscaleTaskId) {
       prediction = await getReplicatePrediction(task.replicatePredictionId)
       timings.replicatePollMs = Date.now() - pollStartedAt
     } else {
-      const resolveStartedAt = Date.now()
-      const inputUrl = await resolveHttpImageUrl(cloud, task.sourceUrl || history.resultUrl)
-      timings.sourceResolveMs = Date.now() - resolveStartedAt
+      const inputUrl = await prepareReplicateInputUrl(cloud, history, task.sourceUrl || history.resultUrl, timings)
       if (!inputUrl) throw new Error('原图不存在，无法生成高清版')
       const predictionStartedAt = Date.now()
       prediction = await createReplicatePrediction(inputUrl)

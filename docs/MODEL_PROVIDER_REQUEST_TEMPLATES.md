@@ -59,23 +59,29 @@ Content-Type: application/json
 ```http
 POST {base_url}/images/edits
 Authorization: Bearer <solo-api-key>
-Content-Type: multipart/form-data
+Content-Type: application/json
 ```
 
-表单字段：
+请求体：
 
-```text
-model = gpt-image-2
-prompt = 生成提示词
-n = 1
-size = auto
-image = <参考图二进制文件>
+```json
+{
+  "model": "gpt-image-2",
+  "prompt": "生成提示词",
+  "n": 1,
+  "size": "auto",
+  "images": [
+    {
+      "image_url": "<参考图 HTTPS 临时链接>"
+    }
+  ]
+}
 ```
 
 约束：
 
-- 不再使用 `/images/generations + image URL`。
-- 云函数先把 `cloud://` 上传图转为 HTTPS 临时链接，再下载为二进制文件上传。
+- Supersolo 的 GPT Image 2 图生图走 `/images/edits`，并使用 `application/json`，不使用 multipart。
+- 参考图字段使用 `images[].image_url`。
 - 响应优先读取 `data[0].b64_json`，兼容 `data[0].url`。
 
 ## 3. Supersolo / Gemini Image
@@ -159,7 +165,57 @@ Content-Type: application/json
 - 结果从 `candidates[].content.parts[].inlineData.data` 或 `inline_data.data` 读取。
 - 如果中转站没有开放 Gemini 协议端点，仍会失败；此时需要调整 CLIProxyAPI 的 Gemini 兼容配置，而不是回退到 OpenAI Images 参数。
 
-## 4. Volcengine / 火山引擎
+## 4. ToAPIs / GPT Image 2
+
+后台模型配置：
+
+```json
+{
+  "provider": "toapis",
+  "base_url": "https://toapis.com/v1",
+  "model_id": "gpt-image-2"
+}
+```
+
+### 4.1 图生图
+
+端点：
+
+```http
+POST {base_url}/images/generations
+Authorization: Bearer <toapis-api-key>
+Content-Type: application/json
+```
+
+请求体：
+
+```json
+{
+  "model": "gpt-image-2",
+  "prompt": "生成提示词",
+  "n": 1,
+  "size": "1:1",
+  "resolution": "2K",
+  "reference_images": [
+    "<参考图 HTTPS URL>"
+  ],
+  "image_urls": [
+    "<参考图 HTTPS URL>"
+  ],
+  "response_format": "url",
+  "client_business_id": "<generation_tasks._id>"
+}
+```
+
+约束：
+
+- ToAPIs 的 `size` 是卡片级比例字段，不再从后台模型配置读取。只要卡片主模型或兜底模型 provider 为 `toapis`，后台卡片编辑器会显示“图片比例”。
+- 当前可选比例只允许 `1:1`、`3:4`、`9:16`。卡片未配置或传入非法值时，云函数兜底发送 `1:1`。
+- 非 ToAPIs provider 不显示卡片级 `size` 字段，继续按各自 provider 请求模板处理；常规 GPT/Gemini 兼容模板默认传 `auto`。
+- `reference_images` 是 ToAPIs 文档主字段；`image_urls` 作为兼容字段保留。
+- `client_business_id` 只用于上游日志追踪，不影响生图内容。
+
+## 5. Volcengine / 火山引擎
 
 后台模型配置：
 
@@ -171,7 +227,7 @@ Content-Type: application/json
 }
 ```
 
-### 4.1 文生图
+### 5.1 文生图
 
 端点：
 
@@ -195,7 +251,7 @@ Content-Type: application/json
 }
 ```
 
-### 4.2 图生图
+### 5.2 图生图
 
 端点同文生图。
 
@@ -219,7 +275,7 @@ Content-Type: application/json
 - 当前响应从 `data[0].url` 读取，再转存到云存储。
 - 当前 `size` 固定为 `2K`，后续如需按后台模型配置调整，应先更新本文档。
 
-## 5. 后续新增提供商模板要求
+## 6. 后续新增提供商模板要求
 
 新增任何模型时，先补齐以下信息：
 
