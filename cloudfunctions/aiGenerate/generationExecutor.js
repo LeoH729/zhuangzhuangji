@@ -3,6 +3,9 @@ const FormData = require('form-data')
 const REQUEST_TIMEOUT_MS = 14 * 60 * 1000
 const IMAGE_DOWNLOAD_TIMEOUT_MS = 60 * 1000
 const STATUS_REQUEST_TIMEOUT_MS = 30 * 1000
+const REFERENCE_IMAGE_COMPRESS_THRESHOLD_BYTES = 8 * 1024 * 1024
+const REFERENCE_IMAGE_TARGET_BYTES = 4 * 1024 * 1024
+const REFERENCE_IMAGE_MAX_DIMENSION = 2048
 
 function buildRequestConfig(modelConfig) {
   return {
@@ -59,7 +62,7 @@ async function resolveHttpImageUrl(cloud, imageUrls) {
 
   const tempRes = await cloud.getTempFileURL({ fileList: [fileID] })
   if (tempRes.fileList && tempRes.fileList.length > 0 && tempRes.fileList[0].tempFileURL) {
-    return tempRes.fileList[0].tempFileURL
+    return optimizeReferenceImageUrl(cloud, tempRes.fileList[0].tempFileURL, fileID)
   }
   return fileID
 }
@@ -123,6 +126,127 @@ async function logReferenceImageDiagnostics(provider, modelConfig, imageUrl, pay
       error: err && err.message,
       code: err && err.code
     })
+  }
+}
+
+function parseContentLength(value) {
+  const size = Number(value)
+  return Number.isFinite(size) && size > 0 ? size : 0
+}
+
+function buildCompressedCloudPath(sourceUrl = '') {
+  const cleanPath = String(sourceUrl || '').split('?')[0]
+  const fileName = cleanPath.includes('/') ? cleanPath.split('/').pop() : ''
+  const baseName = fileName ? fileName.replace(/\.[^.]+$/, '') : `${Date.now()}_${Math.floor(Math.random() * 100000)}`
+  return `compressed_inputs/${baseName}_${Date.now()}.jpg`
+}
+
+function appendUrlParam(url = '', param = '') {
+  const cleanUrl = String(url || '').trim()
+  const cleanParam = String(param || '').trim().replace(/^[?&]+/, '')
+  if (!cleanUrl || !cleanParam) return cleanUrl
+  const separator = cleanUrl.includes('?') ? '&' : '?'
+  return `${cleanUrl}${separator}${cleanParam}`
+}
+
+async function uploadCompressedReferenceImage(cloud, sourceUrl, buffer) {
+  const cloudPath = buildCompressedCloudPath(sourceUrl)
+  const uploadRes = await cloud.uploadFile({
+    cloudPath,
+    fileContent: buffer
+  })
+  if (!uploadRes.fileID) {
+    return ''
+  }
+  const tempRes = await cloud.getTempFileURL({ fileList: [uploadRes.fileID] })
+  return tempRes.fileList && tempRes.fileList[0] && tempRes.fileList[0].tempFileURL
+    ? tempRes.fileList[0].tempFileURL
+    : uploadRes.fileID
+}
+
+function buildImageMogrParam(maxDimension, quality) {
+  return `imageMogr2/thumbnail/${maxDimension}x${maxDimension}%3E/format/jpg/quality/${quality}`
+}
+
+async function compressReferenceImageByCloudProcessing(imageUrl) {
+  const variants = [
+    { maxDimension: REFERENCE_IMAGE_MAX_DIMENSION, quality: 82 },
+    { maxDimension: REFERENCE_IMAGE_MAX_DIMENSION, quality: 72 },
+    { maxDimension: 1600, quality: 72 },
+    { maxDimension: 1600, quality: 62 },
+    { maxDimension: 1280, quality: 62 },
+    { maxDimension: 1280, quality: 52 }
+  ]
+  let bestBuffer = null
+  let bestVariant = null
+
+  for (const variant of variants) {
+    const processedUrl = appendUrlParam(imageUrl, buildImageMogrParam(variant.maxDimension, variant.quality))
+    const response = await axios.get(processedUrl, {
+      responseType: 'arraybuffer',
+      timeout: IMAGE_DOWNLOAD_TIMEOUT_MS,
+      validateStatus: () => true
+    })
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(`imageMogr2 request failed: ${response.status}`)
+    }
+    const buffer = Buffer.from(response.data)
+    if (!bestBuffer || buffer.length < bestBuffer.length) {
+      bestBuffer = buffer
+      bestVariant = variant
+    }
+    if (buffer.length <= REFERENCE_IMAGE_TARGET_BYTES) {
+      return { buffer, variant }
+    }
+  }
+
+  return bestBuffer ? { buffer: bestBuffer, variant: bestVariant } : null
+}
+
+async function optimizeReferenceImageUrl(cloud, imageUrl, sourceFileID = '') {
+  if (!imageUrl || !String(imageUrl).startsWith('http')) {
+    return imageUrl
+  }
+
+  try {
+    const headRes = await axios.head(imageUrl, {
+      timeout: STATUS_REQUEST_TIMEOUT_MS,
+      maxRedirects: 5,
+      validateStatus: () => true
+    })
+    const contentLength = parseContentLength(headRes.headers && headRes.headers['content-length'])
+    const contentType = String((headRes.headers && headRes.headers['content-type']) || '').toLowerCase()
+    if (headRes.status >= 400 || !contentType.includes('image') || contentLength <= REFERENCE_IMAGE_COMPRESS_THRESHOLD_BYTES) {
+      return imageUrl
+    }
+
+    const compressed = await compressReferenceImageByCloudProcessing(imageUrl)
+    const compressedBuffer = compressed && compressed.buffer
+    if (!compressedBuffer || compressedBuffer.length >= contentLength) {
+      return imageUrl
+    }
+
+    const optimizedUrl = await uploadCompressedReferenceImage(cloud, imageUrl, compressedBuffer)
+    if (!optimizedUrl) {
+      return imageUrl
+    }
+
+    console.log('[generationExecutor] reference image compressed', {
+      sourceFileID,
+      originalBytes: contentLength,
+      compressedBytes: compressedBuffer.length,
+      processor: 'cloudbase_ci',
+      maxDimension: compressed.variant && compressed.variant.maxDimension,
+      quality: compressed.variant && compressed.variant.quality
+    })
+    return optimizedUrl
+  } catch (err) {
+    console.warn('[generationExecutor] reference image compression skipped', {
+      sourceFileID,
+      message: err && err.message,
+      code: err && err.code
+    })
+    return imageUrl
   }
 }
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   ArrowDown,
@@ -114,8 +114,46 @@ function Field({ label, children }) {
   )
 }
 
-function TextInput({ value, onChange, ...props }) {
-  return <input value={value ?? ''} onChange={(event) => onChange(event.target.value)} {...props} />
+function TextInput({ value, onChange, onCompositionStart, onCompositionEnd, ...props }) {
+  const composingRef = useRef(false)
+  const [draft, setDraft] = useState(value ?? '')
+
+  useEffect(() => {
+    if (!composingRef.current) {
+      setDraft(value ?? '')
+    }
+  }, [value])
+
+  const handleChange = (event) => {
+    const nextValue = event.target.value
+    setDraft(nextValue)
+    if (!composingRef.current) {
+      onChange(nextValue)
+    }
+  }
+
+  const handleCompositionStart = (event) => {
+    composingRef.current = true
+    onCompositionStart?.(event)
+  }
+
+  const handleCompositionEnd = (event) => {
+    composingRef.current = false
+    const nextValue = event.target.value
+    setDraft(nextValue)
+    onChange(nextValue)
+    onCompositionEnd?.(event)
+  }
+
+  return (
+    <input
+      value={draft}
+      onChange={handleChange}
+      onCompositionStart={handleCompositionStart}
+      onCompositionEnd={handleCompositionEnd}
+      {...props}
+    />
+  )
 }
 
 function NumberInput({ value, onChange, ...props }) {
@@ -999,6 +1037,11 @@ function FeaturesPanel() {
     await reload()
   }
 
+  const refreshFeaturePage = async () => {
+    resetForm()
+    await reload()
+  }
+
   const edit = (item) => {
     setEditingId(item._id)
     setForm(normalizeFeatureForm({ ...EMPTY_FEATURE, ...item, ...(item.has_draft && item.draft_data ? item.draft_data : {}) }))
@@ -1010,6 +1053,11 @@ function FeaturesPanel() {
     if (!window.confirm('确定删除这个卡片？')) return
     await callAdmin('deleteFeature', { id })
     await resetAfterDelete()
+  }
+
+  const copyTemplateId = async (id) => {
+    if (!id) return
+    await navigator.clipboard.writeText(id)
   }
 
   const updateTemplateType = (value) => {
@@ -1057,6 +1105,10 @@ function FeaturesPanel() {
         onReset={resetForm}
         actions={(
           <>
+            <button type="button" className="secondary-button" onClick={refreshFeaturePage} disabled={loading}>
+              <RefreshCw size={16} />
+              刷新
+            </button>
             <button type="button" className="secondary-button" onClick={resetForm}>清空</button>
             <button type="button" className="secondary-button" onClick={saveDraft} disabled={savingDraft || publishing}>
               {savingDraft ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
@@ -1140,6 +1192,7 @@ function FeaturesPanel() {
       </Editor>
       <DataTable loading={loading} error={error} onRefresh={reload} pagination={pagination}>
         <thead><tr>
+          <th>模板ID</th>
           <SortableTh field="name" sort={sort} onSort={toggleSort}>名称</SortableTh>
           <SortableTh field="group" sort={sort} onSort={toggleSort}>分组</SortableTh>
           <SortableTh field="model_call_id" sort={sort} onSort={toggleSort}>模型</SortableTh>
@@ -1155,6 +1208,10 @@ function FeaturesPanel() {
         </tr></thead>
         <tbody>{items.map((item) => (
           <tr key={item._id}>
+            <td className="mono id-cell">
+              <span title={item._id}>{item._id}</span>
+              <IconButton title="复制模板ID" onClick={() => copyTemplateId(item._id)}><Copy size={16} /></IconButton>
+            </td>
             <td>{item.name}</td><td>{item.group}</td><td>{item.model_call_id}</td><td>{item.fallback_model_call_id || '-'}</td><td>{item.points_cost}</td><td>{item.hang_count || 0}</td><td>{item.la_count || 0}</td><td>{FEATURE_STATUS_LABELS[item.status] || item.status}</td><td>{item.has_draft ? '有' : '-'}</td><td>{item.sort}</td><td>{formatDate(item.createdAt)}</td>
             <td className="row-actions"><button onClick={() => edit(item)}>编辑</button><IconButton title="删除" onClick={() => remove(item._id)}><Trash2 size={16} /></IconButton></td>
           </tr>

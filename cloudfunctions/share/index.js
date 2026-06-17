@@ -7,6 +7,7 @@ const db = cloud.database()
 const FEATURE_SCENE_PREFIX = 'f_'
 const FEATURES_COLLECTION = 'ai_features'
 const FEATURE_CODES_COLLECTION = 'feature_share_codes'
+const FEATURE_QR_FILES_COLLECTION = 'feature_qrcode_files'
 
 exports.main = async (event) => {
   const { action, featureId, code } = event
@@ -25,6 +26,11 @@ exports.main = async (event) => {
     }
 
     const path = `pages/feature/feature?id=${featureId}`
+    const cached = await getCachedFeatureQrCode(featureId, path)
+    if (cached) {
+      return cached
+    }
+
     const wxacodeRes = await cloud.openapi.wxacode.get({
       path,
       width: 280
@@ -35,8 +41,18 @@ exports.main = async (event) => {
     }
 
     const uploadRes = await cloud.uploadFile({
-      cloudPath: `share-qrcode/features/${featureId}_${Date.now()}.png`,
+      cloudPath: getFeatureQrCodeCloudPath(featureId),
       fileContent: wxacodeRes.buffer
+    })
+
+    await db.collection(FEATURE_QR_FILES_COLLECTION).doc(featureId).set({
+      data: {
+        featureId,
+        fileID: uploadRes.fileID,
+        path,
+        cloudPath: getFeatureQrCodeCloudPath(featureId),
+        updateTime: db.serverDate()
+      }
     })
 
     return {
@@ -51,6 +67,32 @@ exports.main = async (event) => {
       error: err.message || '小程序码生成失败'
     }
   }
+}
+
+function getFeatureQrCodeCloudPath(featureId) {
+  return `share-qrcode/features/${featureId}.png`
+}
+
+async function getCachedFeatureQrCode(featureId, path) {
+  try {
+    const cacheRes = await db.collection(FEATURE_QR_FILES_COLLECTION).doc(featureId).get()
+    const fileID = cacheRes.data && cacheRes.data.fileID
+    if (!fileID) return null
+
+    const urlRes = await cloud.getTempFileURL({ fileList: [fileID] })
+    const fileInfo = urlRes.fileList && urlRes.fileList[0]
+    if (fileInfo && fileInfo.status === 0) {
+      return {
+        success: true,
+        fileID,
+        path: cacheRes.data.path || path,
+        cached: true
+      }
+    }
+  } catch (err) {
+    console.warn('[share] cached qr code unavailable:', err)
+  }
+  return null
 }
 
 async function ensureFeatureShareCode(featureId) {

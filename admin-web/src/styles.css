@@ -588,6 +588,20 @@ td {
   font-size: 12px;
 }
 
+.id-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 280px;
+}
+
+.id-cell span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .thumb {
   width: 54px;
   height: 54px;
