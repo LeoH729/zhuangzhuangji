@@ -106,6 +106,32 @@ async function markTaskFailed(task, errorMessage, metrics = {}) {
   }
 }
 
+async function notifyGenerationDone(task, historyId, resultUrl) {
+  try {
+    await cloud.callFunction({
+      name: 'notification',
+      data: {
+        action: 'sendGenerationDone',
+        openid: task._openid,
+        taskId: task._id,
+        historyId,
+        resultUrl,
+        featureId: task.featureId || '',
+        title: task.featureNameSnapshot || 'AI图片生成完成',
+        statusText: '已完成',
+        remark: '点击查看生成结果'
+      }
+    })
+  } catch (err) {
+    console.warn('[generationWorker] notification send failed', {
+      taskId: task && task._id,
+      message: err && err.message,
+      errCode: err && err.errCode,
+      errMsg: err && err.errMsg
+    })
+  }
+}
+
 async function processTask(taskId) {
   const processStartedAtMs = Date.now()
   const taskRes = await db.collection(TASKS_COLLECTION).doc(taskId).get()
@@ -307,6 +333,8 @@ async function processTask(taskId) {
         finishedAt: db.serverDate()
       }
     })
+
+    await notifyGenerationDone(task, historyRes._id, resultImageUrl)
 
     console.log('[generationWorker] task completed', {
       taskId: task._id,

@@ -6,6 +6,7 @@ const POLL_TIMEOUT_MS = 16 * 60 * 1000
 const ENSURE_WORKER_INTERVAL_MS = 30000
 const SNAKE_GRID_SIZE = 16
 const SNAKE_TICK_MS = 220
+const DEFAULT_GENERATION_DONE_TEMPLATE_ID = 'sAjTlnxEzFarfa55Rl_X6wBU7lBt8HXiEcF6p4i-IaU'
 
 Page({
   data: {
@@ -20,6 +21,7 @@ Page({
     resultReady: false,
     resultUrl: '',
     resultHistoryId: '',
+    notificationTemplateId: '',
     snakeCells: [],
     snakeScore: 0,
     snakeBest: 0,
@@ -43,6 +45,7 @@ Page({
         feature_id: options.featureId,
         source: 'analyzing'
       })
+      this.loadNotificationConfig()
       this.startProgress()
       this.startAsyncGeneration()
     } else {
@@ -281,6 +284,116 @@ Page({
     console.log('[analyzing] triggerWorker 已弃用，改由 ensureWorker 异步拉起。', taskId)
   },
 
+  async loadNotificationConfig() {
+    try {
+      const res = await wx.cloud.callFunction({
+        name: 'notification',
+        data: { action: 'getConfig' }
+      })
+      const config = res && res.result && res.result.config
+      const templateId = (config && config.generationDoneTemplateId) || ''
+      this.setData({ notificationTemplateId: templateId })
+    } catch (err) {
+      console.warn('[analyzing] notification config load failed', err)
+      this.setData({ notificationTemplateId: '' })
+    }
+  },
+
+  requestGenerationDoneSubscription(source) {
+    if (!wx.requestSubscribeMessage) {
+      console.warn('[analyzing] requestSubscribeMessage is unavailable')
+      return Promise.resolve(false)
+    }
+
+    const templateId = this.data.notificationTemplateId || DEFAULT_GENERATION_DONE_TEMPLATE_ID
+    if (!templateId || this.data.resultReady) {
+      console.log('[analyzing] skip subscribe request', {
+        hasTemplate: !!templateId,
+        taskId: this.data.taskId || '',
+        resultReady: this.data.resultReady
+      })
+      return Promise.resolve(false)
+    }
+
+    return new Promise((resolve) => {
+      wx.requestSubscribeMessage({
+        tmplIds: [templateId],
+        success: async (subscribeResult) => {
+          const status = subscribeResult && subscribeResult[templateId]
+          console.log('[analyzing] request subscribe message result', {
+            templateId,
+            status,
+            result: subscribeResult
+          })
+          report('generation_subscribe_result', {
+            feature_id: this.data.featureId,
+            task_id: this.data.taskId || '',
+            source,
+            status: status || 'unknown'
+          })
+
+          if (status !== 'accept') {
+            if (status === 'reject') {
+              await this.showSubscribeSettingGuide()
+            }
+            resolve(false)
+            return
+          }
+
+          try {
+            await wx.cloud.callFunction({
+              name: 'notification',
+              data: {
+                action: 'grantCredits',
+                templateId,
+                source,
+                taskId: this.data.taskId || '',
+                featureId: this.data.featureId || '',
+                page: 'pages/result/result'
+              }
+            })
+            resolve(true)
+          } catch (err) {
+            console.warn('[analyzing] grant notification credit failed', err)
+            resolve(false)
+          }
+        },
+        fail: (err) => {
+          console.warn('[analyzing] request subscribe message failed', err)
+          report('generation_subscribe_result', {
+            feature_id: this.data.featureId,
+            task_id: this.data.taskId || '',
+            source,
+            status: 'fail',
+            err_msg: err && err.errMsg || err && err.message || ''
+          })
+          resolve(false)
+        }
+      })
+    })
+  },
+
+  showSubscribeSettingGuide() {
+    return new Promise((resolve) => {
+      wx.showModal({
+        title: '开启任务提醒',
+        content: '你已关闭任务完成提醒，如需收到生图完成通知，请在设置中重新开启。',
+        confirmText: '去设置',
+        cancelText: '继续离开',
+        success: (res) => {
+          if (res.confirm && wx.openSetting) {
+            wx.openSetting({
+              complete: () => resolve()
+            })
+            return
+          }
+          resolve()
+        },
+        fail: () => resolve()
+      })
+    })
+  },
+
   async startAsyncGeneration() {
     try {
       const createRes = await wx.cloud.callFunction({
@@ -334,7 +447,7 @@ Page({
         content: '任务仍在后台执行，你可以返回上一页稍后在历史记录中查看结果。',
         confirmText: '继续等待',
         cancelText: '返回',
-        success: (res) => {
+        success: async (res) => {
           if (res.confirm) {
             this.pollStartedAt = Date.now()
             this.startProgress()
@@ -343,6 +456,7 @@ Page({
             }, POLL_INTERVAL_MS)
             this.pollTaskStatus(taskId)
           } else {
+            await this.requestGenerationDoneSubscription('timeout_back')
             this.reportWaitLeave('timeout_back')
             wx.navigateBack()
           }
@@ -490,11 +604,12 @@ Page({
     }
   },
 
-  handleBottomAction() {
+  async handleBottomAction() {
     if (this.data.resultReady) {
       this.openResultPage()
       return
     }
+    await this.requestGenerationDoneSubscription('browse_other')
     this.goHome()
   },
 
