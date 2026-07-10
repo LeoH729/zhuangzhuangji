@@ -16,7 +16,7 @@ function elapsedSince(value, fallbackMs = Date.now()) {
 }
 
 function isUpstreamAsyncProvider(provider = '') {
-  return provider === 'toapis' || provider === 'supersolo_async'
+  return provider === 'toapis' || provider === 'supersolo_async' || provider === 'jimeng_cli'
 }
 
 function getActiveModelCallId(task = {}) {

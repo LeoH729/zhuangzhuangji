@@ -1,0 +1,6 @@
+{
+  "envId": "cloudbase-5gmfinom29f48930",
+  "cloudrun": {
+    "name": "jimeng-wrapper"
+  }
+}

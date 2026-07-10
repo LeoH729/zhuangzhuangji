@@ -1,4 +1,6 @@
 {
   "navigationBarTitleText": "功能详情",
-  "usingComponents": {}
+  "usingComponents": {
+    "reward-modal": "/components/reward-modal/reward-modal"
+  }
 }

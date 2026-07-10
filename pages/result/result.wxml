@@ -23,6 +23,7 @@
   <view class="action-box">
     <view class="reward-bubble" wx:if="{{!shareTask.completed && !isSharedResult}}">+{{shareTask.reward}}星光奖励</view>
     <view class="action-row">
+      <button class="result-action-btn result-action-secondary" bindtap="goHome" hover-class="btn-hover">回到首页</button>
       <button class="result-action-btn result-action-secondary" bindtap="saveImage" hover-class="btn-hover">保存原图</button>
       <button wx:if="{{isSharedResult}}" class="result-action-btn result-action-primary" bindtap="goGenerateSame" hover-class="btn-hover">生成同款图片</button>
       <button wx:else class="result-action-btn result-action-primary" bindtap="openSharePanel" hover-class="btn-hover">分享给好友</button>

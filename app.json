@@ -1,5 +1,7 @@
 {
   "pages": [
+    "pages/boss-zone/boss-zone",
+    "pages/play-zone/play-zone",
     "pages/index/index",
     "pages/feature/feature",
     "pages/feature-unavailable/feature-unavailable",
@@ -24,10 +26,16 @@
   "tabBar": {
     "list": [
       {
-        "pagePath": "pages/index/index",
-        "text": "梦图",
-        "iconPath": "images/icon_home.png",
-        "selectedIconPath": "images/icon_home_selected.png"
+        "pagePath": "pages/boss-zone/boss-zone",
+        "text": "老板专区",
+        "iconPath": "images/icon_boss.png",
+        "selectedIconPath": "images/icon_boss_selected.png"
+      },
+      {
+        "pagePath": "pages/play-zone/play-zone",
+        "text": "玩图专区",
+        "iconPath": "images/icon_play.png",
+        "selectedIconPath": "images/icon_play_selected.png"
       },
       {
         "pagePath": "pages/profile/profile",

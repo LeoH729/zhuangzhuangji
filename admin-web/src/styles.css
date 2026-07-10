@@ -316,6 +316,35 @@ textarea:focus {
   gap: 8px;
 }
 
+.table-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid #dbe2ee;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.table-tabs button {
+  border: 0;
+  border-radius: 6px;
+  padding: 8px 14px;
+  background: transparent;
+  color: #647084;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.table-tabs button.active {
+  background: #ffffff;
+  color: #111827;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(180px, 1fr));

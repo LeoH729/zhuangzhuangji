@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "老板专区",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "reward-modal": "/components/reward-modal/reward-modal"
+  }
+}

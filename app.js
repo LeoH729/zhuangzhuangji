@@ -1,7 +1,11 @@
 // 全局分享能力注入（必须在所有 Page 之前执行）
 require('./utils/page-share-mixin');
 
-const { report } = require('./utils/analytics.js')
+const { report, reportGenerationFailed } = require('./utils/analytics.js')
+const { showRewardedVideo } = require('./utils/rewarded-video.js')
+
+const ANALYTICS_TEST_OPENID = 'obLo_1_UleSf8eX83HwIT_GGq8mA'
+const ANALYTICS_TEST_STORAGE_KEY = 'analytics_generation_submit_failed_manual_test_v1'
 
 function getTopPage() {
   const pages = getCurrentPages()
@@ -15,7 +19,7 @@ App({
     userInfo: null,
     openid: null,
     userPoints: 0,
-    version: '1.4.3',
+    version: '1.4.5',
     pointsConfig: {
       name: '妆妆蛋',
       initial_points: 100,
@@ -73,6 +77,7 @@ App({
       success: res => {
         console.log('获取openid成功:', res.result.openid);
         this.globalData.openid = res.result.openid;
+        this.reportGenerationSubmitFailedTest(res.result.openid)
 
         // 提取或初始化 userInfo
         let userInfo = wx.getStorageSync('userInfo') || {};
@@ -108,6 +113,21 @@ App({
     });
   },
 
+  reportGenerationSubmitFailedTest(openid) {
+    if (openid !== ANALYTICS_TEST_OPENID || wx.getStorageSync(ANALYTICS_TEST_STORAGE_KEY)) return
+
+    wx.setStorageSync(ANALYTICS_TEST_STORAGE_KEY, Date.now())
+    report('generation_submit_failed', {
+      feature_id: 'analytics_manual_test',
+      feature_name: '生图提交失败埋点测试',
+      feature_group: 'system_test',
+      template_type: 'image_to_image',
+      source: 'manual_test',
+      error_type: 'manual_test',
+      error_msg: 'manual analytics verification'
+    })
+  },
+
   // 拉取积分配置和用户当前积分（一次性，不开监听）
   async initPointsData() {
     try {
@@ -123,6 +143,7 @@ App({
         this.globalData.userPoints = pts
         wx.setStorageSync('userPoints', pts)
       }
+      this.checkNewUserGiftModal()
     } catch (e) {
       console.error('初始化积分数据失败', e)
     }
@@ -138,12 +159,21 @@ App({
     this.startGenerationWatcher()
   },
 
-  trackGenerationTask(taskId) {
+  trackGenerationTask(taskId, options = {}) {
     if (!taskId) return
     this.generationWatchTasks = this.generationWatchTasks || {}
-    this.generationWatchTasks[taskId] = { taskId, createdAt: Date.now() }
+    const existingTask = this.generationWatchTasks[taskId] || {}
+    this.generationWatchTasks[taskId] = Object.assign({}, existingTask, options, {
+      taskId,
+      createdAt: existingTask.createdAt || Date.now()
+    })
     wx.setStorageSync('generationWatchTasks', this.generationWatchTasks)
     this.startGenerationWatcher()
+  },
+
+  setGenerationTaskBannerSuppressed(taskId, suppressBanner) {
+    if (!taskId || !this.generationWatchTasks || !this.generationWatchTasks[taskId]) return
+    this.trackGenerationTask(taskId, { suppressBanner: !!suppressBanner })
   },
 
   finishTrackedGenerationTask(taskId, options = {}) {
@@ -199,8 +229,13 @@ App({
             history_id: task.historyId || '',
             source: 'watcher'
           })
-          this.finishTrackedGenerationTask(taskId, { task })
+          const taskMeta = tasks[taskId] || {}
+          this.finishTrackedGenerationTask(taskId, {
+            task,
+            silent: taskMeta.suppressBanner === true
+          })
         } else if (task.status === 'failed') {
+          reportGenerationFailed(Object.assign({}, task, { taskId }), 'watcher')
           this.finishTrackedGenerationTask(taskId, { silent: true })
         }
       }
@@ -257,7 +292,81 @@ App({
     wx.navigateTo({ url: '/pages/generation-history/generation-history' })
   },
 
-  // 管理员身份校验
+  async checkNewUserGiftModal() {
+    if (this.checkingNewUserGift || this.showingNewUserGiftModal) return
+
+    this.checkingNewUserGift = true
+    try {
+      const res = await wx.cloud.callFunction({
+        name: 'points',
+        data: { action: 'getNewUserGiftTask' }
+      })
+      const task = res && res.result && res.result.data
+      if (!task || task.completed) return
+      this.showNewUserGiftModal()
+    } catch (err) {
+      console.warn('[app] check new user gift failed', err)
+    } finally {
+      this.checkingNewUserGift = false
+    }
+  },
+
+  showNewUserGiftModal() {
+    if (this.showingNewUserGiftModal) return
+    this.showingNewUserGiftModal = true
+    this.syncNewUserGiftModalToCurrentPage()
+  },
+
+  syncNewUserGiftModalToCurrentPage() {
+    const currentPage = getTopPage()
+    if (currentPage && typeof currentPage.setData === 'function') {
+      currentPage.setData({ newUserGiftModalVisible: !!this.showingNewUserGiftModal })
+    }
+  },
+
+  dismissNewUserGiftModal() {
+    this.showingNewUserGiftModal = false
+    this.syncNewUserGiftModalToCurrentPage()
+  },
+
+  async claimNewUserGift(source = 'unknown') {
+    this.showingNewUserGiftModal = false
+    this.syncNewUserGiftModalToCurrentPage()
+    try {
+      const adRes = await showRewardedVideo({ scene: 'new_user_gift' })
+      if (!adRes || !adRes.completed) {
+        wx.showToast({ title: '完整观看后可领取奖励', icon: 'none' })
+        return { success: false, canceled: true }
+      }
+    } catch (err) {
+      wx.showToast({ title: (err && err.message) || '广告加载失败，请稍后重试', icon: 'none' })
+      return { success: false, error: err }
+    }
+
+    try {
+      wx.showLoading({ title: '领取中...', mask: true })
+      const res = await wx.cloud.callFunction({
+        name: 'points',
+        data: { action: 'claimNewUserGift', source }
+      })
+      wx.hideLoading()
+      if (res.result && res.result.success && res.result.data) {
+        const points = Number(res.result.data.points || 0)
+        this.globalData.userPoints = points
+        wx.setStorageSync('userPoints', points)
+        wx.showToast({ title: '奖励已到账', icon: 'success' })
+        return { success: true, data: res.result.data }
+      }
+      wx.showToast({ title: (res.result && res.result.message) || '领取失败', icon: 'none' })
+      return { success: false, result: res.result }
+    } catch (err) {
+      wx.hideLoading()
+      console.error('[app] claim new user gift failed', err)
+      wx.showToast({ title: '领取失败，请稍后重试', icon: 'none' })
+      return { success: false, error: err }
+    }
+  },
+
   async checkAdminRole() {
     try {
       const res = await wx.cloud.callFunction({ name: 'admin', data: { action: 'isAdmin' } })

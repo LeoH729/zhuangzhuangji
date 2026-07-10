@@ -48,6 +48,14 @@
   "packOptions": {
     "ignore": [
       {
+        "value": ".npm-cache*/**",
+        "type": "glob"
+      },
+      {
+        "value": ".cloudbase-config/**",
+        "type": "glob"
+      },
+      {
         "value": "wx-subscribe-sdk/**",
         "type": "glob"
       },

@@ -34,7 +34,7 @@ const COLLECTIONS = {
 
 const TEMPLATE_TYPE_IMAGE = 'image_to_image'
 const TEMPLATE_TYPE_TEXT = 'text_to_image'
-const TEXT_TO_IMAGE_PROVIDERS = ['volcengine', 'supersolo', 'supersolo_async', 'toapis', 'joapi']
+const TEXT_TO_IMAGE_PROVIDERS = ['volcengine', 'supersolo', 'supersolo_async', 'toapis', 'joapi', 'jimeng_cli']
 const TOAPIS_SIZE_OPTIONS = ['1:1', '3:4', '9:16']
 
 const MODEL_FIELDS = [
@@ -44,15 +44,18 @@ const MODEL_FIELDS = [
   'base_url',
   'model_id',
   'api_key',
+  'ratio',
+  'resolution_type',
   'status',
   'remark'
 ]
 
-const GROUP_FIELDS = ['name', 'status', 'sort', 'description']
+const GROUP_FIELDS = ['name', 'zone', 'status', 'sort', 'description']
 const ADMIN_FIELDS = ['uid', 'openid', 'username', 'displayName', 'role', 'status']
 const FEATURE_FIELDS = [
   'name',
   'group',
+  'placements',
   'home_banner',
   'detail_banner',
   'upload_count',
@@ -80,6 +83,13 @@ const IMAGE_FIELDS = [
   'objectKey',
   'cloudPath',
   'fileID',
+  'modelCallId',
+  'model_call_id',
+  'modelCallIdSnapshot',
+  'generatedOpenid',
+  'generated_openid',
+  'openid',
+  '_openid',
   'temporaryUrl',
   'size',
   'etag',
@@ -124,6 +134,38 @@ function normalizeInputFields(fields = []) {
     }))
     .filter((field) => field.key)
     .sort((a, b) => a.sort - b.sort)
+}
+
+function normalizeZone(value = '') {
+  return value === 'boss' ? 'boss' : 'play'
+}
+
+function isFeatureZone(value = '') {
+  return value === 'boss' || value === 'play'
+}
+
+function normalizePlacements(placements = [], legacyGroup = '') {
+  const list = Array.isArray(placements) ? placements : []
+  const normalized = list
+    .map((item) => ({
+      zone: normalizeZone(item && item.zone),
+      group: String(item && item.group || '').trim()
+    }))
+    .filter((item) => item.group)
+
+  if (normalized.length > 0) return normalized
+  const group = String(legacyGroup || '').trim()
+  return group ? [{ zone: 'play', group }] : []
+}
+
+function featureMatchesZone(feature = {}, zone = '') {
+  if (!isFeatureZone(zone)) return true
+  return normalizePlacements(feature.placements, feature.group).some((item) => item.zone === zone)
+}
+
+function groupMatchesZone(group = {}, zone = '') {
+  if (!isFeatureZone(zone)) return true
+  return normalizeZone(group.zone) === zone
 }
 
 function normalizeInputValues(inputValues = {}, fields = []) {
@@ -404,7 +446,38 @@ async function updateModel(payload) {
 }
 
 async function listGroups(payload) {
-  return listCollection(COLLECTIONS.groups, payload)
+  const zone = isFeatureZone(payload && payload.zone) ? payload.zone : ''
+  if (!zone) return listCollection(COLLECTIONS.groups, payload)
+
+  const page = Math.max(normalizeNumber(payload.page, 1), 1)
+  const pageSize = Math.min(Math.max(normalizeNumber(payload.pageSize, 20), 1), 100)
+  const { sortBy, sortOrder } = normalizeSort(payload, 'sort', 'asc')
+  const countRes = await db.collection(COLLECTIONS.groups).count()
+  const total = countRes.total || 0
+  const all = []
+  const limit = 100
+
+  for (let skip = 0; skip < total; skip += limit) {
+    const res = await db.collection(COLLECTIONS.groups).skip(skip).limit(limit).get()
+    all.push(...(res.data || []))
+  }
+
+  const direction = sortOrder === 'asc' ? 1 : -1
+  const filtered = all.filter((item) => groupMatchesZone(item, zone))
+  filtered.sort((a, b) => {
+    const left = normalizeSortValue(a[sortBy])
+    const right = normalizeSortValue(b[sortBy])
+    if (left < right) return -1 * direction
+    if (left > right) return 1 * direction
+    return 0
+  })
+
+  return success({
+    data: filtered.slice((page - 1) * pageSize, page * pageSize),
+    total: filtered.length,
+    page,
+    pageSize
+  })
 }
 
 async function createGroup(payload) {
@@ -451,7 +524,41 @@ async function deleteAdmin(payload = {}, caller) {
 }
 
 async function listFeatures(payload = {}) {
-  const result = await listCollection(COLLECTIONS.features, payload)
+  const zone = isFeatureZone(payload.zone) ? payload.zone : ''
+  let result
+  if (zone) {
+    const page = Math.max(normalizeNumber(payload.page, 1), 1)
+    const pageSize = Math.min(Math.max(normalizeNumber(payload.pageSize, 20), 1), 100)
+    const { sortBy, sortOrder } = normalizeSort(payload)
+    const countRes = await db.collection(COLLECTIONS.features).count()
+    const total = countRes.total || 0
+    const all = []
+    const limit = 100
+
+    for (let skip = 0; skip < total; skip += limit) {
+      const res = await db.collection(COLLECTIONS.features).skip(skip).limit(limit).get()
+      all.push(...(res.data || []))
+    }
+
+    const direction = sortOrder === 'asc' ? 1 : -1
+    const filtered = all.filter((item) => featureMatchesZone(item, zone))
+    filtered.sort((a, b) => {
+      const left = normalizeSortValue(a[sortBy])
+      const right = normalizeSortValue(b[sortBy])
+      if (left < right) return -1 * direction
+      if (left > right) return 1 * direction
+      return 0
+    })
+
+    result = success({
+      data: filtered.slice((page - 1) * pageSize, page * pageSize),
+      total: filtered.length,
+      page,
+      pageSize
+    })
+  } else {
+    result = await listCollection(COLLECTIONS.features, payload)
+  }
   const imageWhere = payload.imageFolder ? { folder: payload.imageFolder } : {}
   const [modelsRes, groupsRes, imagesRes] = await Promise.all([
     db.collection(COLLECTIONS.models).field({ model_call_id: true, name: true, provider: true, status: true }).get(),
@@ -472,9 +579,20 @@ async function listFeatures(payload = {}) {
 }
 
 async function createFeature(payload) {
-  if (!payload || !payload.name) return failure('BAD_REQUEST', '缺少卡片名称')
-  if (!payload.model_call_id) return failure('BAD_REQUEST', '请选择模型')
-  return createDoc(COLLECTIONS.features, payload, FEATURE_FIELDS)
+  const feature = normalizeFeaturePayload(payload || {})
+  if (!feature.name) return failure('BAD_REQUEST', '缺少卡片名称')
+  if (!feature.model_call_id) return failure('BAD_REQUEST', '请选择模型')
+  if (feature.placements.length === 0) return failure('BAD_REQUEST', '请至少配置一个归属')
+  return createDoc(COLLECTIONS.features, feature, FEATURE_FIELDS)
+}
+
+async function updateFeature(payload = {}) {
+  if (!payload.id) return failure('BAD_REQUEST', '缺少记录 ID')
+  const feature = normalizeFeaturePayload(payload.data || {})
+  await db.collection(COLLECTIONS.features).doc(payload.id).update({
+    data: { ...feature, updatedAt: now() }
+  })
+  return success()
 }
 
 function normalizeFeaturePayload(payload = {}) {
@@ -491,6 +609,8 @@ function normalizeFeaturePayload(payload = {}) {
   data.status = normalizeNumber(data.status, 0)
   data.sort = normalizeNumber(data.sort, 10)
   data.tag = data.tag || 'normal'
+  data.placements = normalizePlacements(data.placements, data.group)
+  data.group = data.placements[0] ? data.placements[0].group : ''
   return data
 }
 
@@ -579,6 +699,7 @@ async function publishFeature(payload = {}, caller = {}) {
   const source = payload.data ? normalizeFeaturePayload({ ...payload.data, status: 1 }) : null
   if (source && !source.name) return failure('BAD_REQUEST', '缺少卡片名称')
   if (source && !source.model_call_id) return failure('BAD_REQUEST', '请选择模型')
+  if (source && source.placements.length === 0) return failure('BAD_REQUEST', '请至少配置一个归属')
 
   if (!id) {
     if (!source) return failure('BAD_REQUEST', '缺少发布数据')
@@ -597,6 +718,7 @@ async function publishFeature(payload = {}, caller = {}) {
   const publishData = source || normalizeFeaturePayload({ ...(current.draft_data || current), status: 1 })
   if (!publishData.name) return failure('BAD_REQUEST', '缺少卡片名称')
   if (!publishData.model_call_id) return failure('BAD_REQUEST', '请选择模型')
+  if (publishData.placements.length === 0) return failure('BAD_REQUEST', '请至少配置一个归属')
 
   await db.collection(COLLECTIONS.features).doc(id).update({
     data: {
@@ -721,6 +843,90 @@ async function getDebugGenerationStatus(payload = {}, caller = {}) {
   })
 }
 
+function getImageModelCallId(item = {}) {
+  return item.modelCallId || item.model_call_id || item.modelCallIdSnapshot || ''
+}
+
+function getImageGeneratedOpenid(item = {}) {
+  return item.generatedOpenid || item.generated_openid || item.openid || item._openid || ''
+}
+
+function getImageResultCandidates(item = {}) {
+  const candidates = [
+    item.fileID,
+    item.resultUrl,
+    item.upscaledUrl
+  ]
+  const objectKey = cleanPrefix(item.objectKey || item.cloudPath || '')
+  if (objectKey) {
+    candidates.push(getFileIDFromKey(objectKey))
+  }
+  return [...new Set(candidates.filter(Boolean))]
+}
+
+function putImageGenerationMeta(map, resultUrl, source = {}) {
+  if (!resultUrl || map[resultUrl]) return
+  const modelCallId = source.modelCallId || source.model_call_id || source.modelCallIdSnapshot || ''
+  const generatedOpenid = source.generatedOpenid || source.generated_openid || source.openid || source._openid || ''
+  if (!modelCallId && !generatedOpenid) return
+  map[resultUrl] = {
+    modelCallId,
+    generatedOpenid,
+    provider: source.provider || '',
+    fallbackUsed: !!source.fallbackUsed
+  }
+}
+
+async function enrichImageGenerationInfo(items = []) {
+  const missingItems = items.filter((item) => !getImageModelCallId(item) || !getImageGeneratedOpenid(item))
+  if (missingItems.length === 0) return items
+
+  const candidates = [...new Set(missingItems.flatMap(getImageResultCandidates))].slice(0, 100)
+  if (candidates.length === 0) return items
+
+  const generationMap = {}
+  const historyRes = await db.collection(COLLECTIONS.generationHistory)
+    .where(_.or([
+      { resultUrl: _.in(candidates) },
+      { upscaledUrl: _.in(candidates) }
+    ]))
+    .field({ resultUrl: true, upscaledUrl: true, modelCallId: true, provider: true, fallbackUsed: true, _openid: true })
+    .limit(100)
+    .get()
+
+  ;(historyRes.data || []).forEach((item) => {
+    putImageGenerationMeta(generationMap, item.resultUrl, item)
+    putImageGenerationMeta(generationMap, item.upscaledUrl, item)
+  })
+
+  const unresolvedCandidates = candidates.filter((candidate) => !generationMap[candidate])
+  if (unresolvedCandidates.length > 0) {
+    const taskRes = await db.collection(COLLECTIONS.generationTasks)
+      .where({ resultUrl: _.in(unresolvedCandidates) })
+      .field({ resultUrl: true, modelCallId: true, modelCallIdSnapshot: true, provider: true, fallbackUsed: true, _openid: true })
+      .limit(100)
+      .get()
+
+    ;(taskRes.data || []).forEach((item) => {
+      putImageGenerationMeta(generationMap, item.resultUrl, item)
+    })
+  }
+
+  return items.map((item) => {
+    if (getImageModelCallId(item) && getImageGeneratedOpenid(item)) return item
+    const candidate = getImageResultCandidates(item).find((value) => generationMap[value])
+    if (!candidate) return item
+    const meta = generationMap[candidate]
+    return {
+      ...item,
+      modelCallId: getImageModelCallId(item) || meta.modelCallId,
+      generatedOpenid: getImageGeneratedOpenid(item) || meta.generatedOpenid,
+      provider: item.provider || meta.provider,
+      fallbackUsed: item.fallbackUsed ?? meta.fallbackUsed
+    }
+  })
+}
+
 async function listImages(payload) {
   const where = payload && payload.folder ? { folder: payload.folder } : {}
   const result = await listCollection(COLLECTIONS.images, { ...payload, where })
@@ -728,7 +934,10 @@ async function listImages(payload) {
   const foldersRes = await db.collection(COLLECTIONS.images).field({ folder: true }).limit(1000).get()
   const folders = [...new Set((foldersRes.data || []).map((item) => item.folder || '').filter((item) => item !== ''))].sort()
   result.folders = folders
-  if (fileList.length === 0) return result
+  if (fileList.length === 0) {
+    result.data = await enrichImageGenerationInfo(result.data || [])
+    return result
+  }
 
   const tempRes = await cloud.getTempFileURL({ fileList: fileList.slice(0, 50) })
   const urlMap = {}
@@ -739,6 +948,7 @@ async function listImages(payload) {
     ...item,
     temporaryUrl: urlMap[item.fileID] || item.temporaryUrl || ''
   }))
+  result.data = await enrichImageGenerationInfo(result.data)
   return result
 }
 
@@ -1235,7 +1445,7 @@ async function dispatch(action, payload, caller) {
     case 'createFeature':
       return createFeature(payload)
     case 'updateFeature':
-      return updateDoc(COLLECTIONS.features, payload, FEATURE_FIELDS)
+      return updateFeature(payload)
     case 'saveFeatureDraft':
       return saveFeatureDraft(payload, caller)
     case 'publishFeature':

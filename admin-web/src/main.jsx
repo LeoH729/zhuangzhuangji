@@ -26,7 +26,7 @@ import './styles.css'
 
 const TABS = [
   { key: 'models', label: '模型', icon: Database },
-  { key: 'groups', label: '分组', icon: FolderTree },
+  { key: 'groups', label: '标签', icon: FolderTree },
   { key: 'images', label: '图片', icon: Image },
   { key: 'features', label: '卡片', icon: Wand2 },
   { key: 'users', label: '用户', icon: UserRound },
@@ -40,11 +40,19 @@ const EMPTY_MODEL = {
   base_url: '',
   model_id: '',
   api_key: '',
+  ratio: '',
+  resolution_type: '',
   status: 1,
   remark: ''
 }
 
-const EMPTY_GROUP = { name: '', status: 1, sort: 10, description: '' }
+const ZONE_OPTIONS = ['boss', 'play']
+const ZONE_LABELS = {
+  boss: '老板专区',
+  play: '玩图专区'
+}
+
+const EMPTY_GROUP = { name: '', zone: 'play', status: 1, sort: 10, description: '' }
 const EMPTY_IMAGE = {
   name: '',
   category: '',
@@ -60,6 +68,7 @@ const EMPTY_IMAGE = {
 const EMPTY_FEATURE = {
   name: '',
   group: '',
+  placements: [{ zone: 'play', group: '' }],
   home_banner: '',
   detail_banner: '',
   template_type: 'image_to_image',
@@ -86,7 +95,7 @@ const FEATURE_STATUS_LABELS = {
   0: '草稿',
   1: '已发布'
 }
-const TEXT_TO_IMAGE_PROVIDERS = ['volcengine', 'supersolo', 'supersolo_async', 'toapis', 'joapi']
+const TEXT_TO_IMAGE_PROVIDERS = ['volcengine', 'supersolo', 'supersolo_async', 'toapis', 'joapi', 'jimeng_cli']
 const TOAPIS_SIZE_OPTIONS = ['1:1', '3:4', '9:16']
 const EMPTY_ADMIN = {
   uid: '',
@@ -393,6 +402,8 @@ function ModelsPanel() {
         <Field label="Base URL"><TextInput value={form.base_url} onChange={(value) => setForm({ ...form, base_url: value })} /></Field>
         <Field label="模型 ID"><TextInput value={form.model_id} onChange={(value) => setForm({ ...form, model_id: value })} /></Field>
         <Field label="API Key"><TextInput value={form.api_key} onChange={(value) => setForm({ ...form, api_key: value })} type="password" placeholder={editingId ? '留空则不修改' : ''} /></Field>
+        <Field label="图片比例"><TextInput value={form.ratio} onChange={(value) => setForm({ ...form, ratio: value })} placeholder="即梦默认 1:1" /></Field>
+        <Field label="分辨率"><TextInput value={form.resolution_type} onChange={(value) => setForm({ ...form, resolution_type: value })} placeholder="即梦默认 2k" /></Field>
         <Field label="状态"><NumberInput value={form.status} onChange={(value) => setForm({ ...form, status: value })} /></Field>
         <Field label="备注"><Textarea value={form.remark} onChange={(value) => setForm({ ...form, remark: value })} /></Field>
       </Editor>
@@ -411,7 +422,12 @@ function ModelsPanel() {
 }
 
 function GroupsPanel() {
-  const { items, loading, error, reload, pagination } = useAdminList('listGroups')
+  const [tableZone, setTableZone] = useState('boss')
+  const { items, loading, error, reload, pagination } = useAdminList(
+    'listGroups',
+    [tableZone],
+    () => ({ zone: tableZone, sortBy: 'sort', sortOrder: 'asc' })
+  )
   const [form, setForm] = useState(EMPTY_GROUP)
   const [editingId, setEditingId] = useState('')
 
@@ -423,24 +439,39 @@ function GroupsPanel() {
   }
 
   const remove = async (id) => {
-    if (!window.confirm('确定删除这个分组？')) return
+    if (!window.confirm('确定删除这个标签？')) return
     await callAdmin('deleteGroup', { id })
     await reload()
   }
 
   return (
     <section className="workspace">
-      <Editor title={editingId ? '编辑分组' : '新增分组'} onSave={save} onReset={() => { setForm(EMPTY_GROUP); setEditingId('') }}>
+      <Editor title={editingId ? '编辑标签' : '新增标签'} onSave={save} onReset={() => { setForm(EMPTY_GROUP); setEditingId('') }}>
         <Field label="名称"><TextInput value={form.name} onChange={(value) => setForm({ ...form, name: value })} /></Field>
+        <Field label="专区"><Select value={form.zone} onChange={(value) => setForm({ ...form, zone: value || 'play' })} options={ZONE_OPTIONS} labels={ZONE_LABELS} /></Field>
         <Field label="状态"><NumberInput value={form.status} onChange={(value) => setForm({ ...form, status: value })} /></Field>
         <Field label="排序"><NumberInput value={form.sort} onChange={(value) => setForm({ ...form, sort: value })} /></Field>
         <Field label="描述"><Textarea value={form.description} onChange={(value) => setForm({ ...form, description: value })} /></Field>
       </Editor>
+      <div className="table-tabs" role="tablist" aria-label="标签专区">
+        {ZONE_OPTIONS.map((zone) => (
+          <button
+            key={zone}
+            type="button"
+            role="tab"
+            aria-selected={tableZone === zone}
+            className={tableZone === zone ? 'active' : ''}
+            onClick={() => setTableZone(zone)}
+          >
+            {ZONE_LABELS[zone]}
+          </button>
+        ))}
+      </div>
       <DataTable loading={loading} error={error} onRefresh={reload} pagination={pagination}>
-        <thead><tr><th>名称</th><th>状态</th><th>排序</th><th>描述</th><th></th></tr></thead>
+        <thead><tr><th>名称</th><th>专区</th><th>状态</th><th>排序</th><th>描述</th><th></th></tr></thead>
         <tbody>{items.map((item) => (
           <tr key={item._id}>
-            <td>{item.name}</td><td>{item.status}</td><td>{item.sort}</td><td>{item.description || '-'}</td>
+            <td>{item.name}</td><td>{ZONE_LABELS[item.zone || 'play']}</td><td>{item.status}</td><td>{item.sort}</td><td>{item.description || '-'}</td>
             <td className="row-actions"><button onClick={() => { setEditingId(item._id); setForm({ ...EMPTY_GROUP, ...item }) }}>编辑</button><IconButton title="删除" onClick={() => remove(item._id)}><Trash2 size={16} /></IconButton></td>
           </tr>
         ))}</tbody>
@@ -616,6 +647,22 @@ function ImagesPanel() {
     }
   }
 
+  const getImageModelLabel = (item = {}) => (
+    item.modelCallId ||
+    item.model_call_id ||
+    item.modelCallIdSnapshot ||
+    item.model ||
+    '-'
+  )
+
+  const getImageOwnerOpenid = (item = {}) => (
+    item.generatedOpenid ||
+    item.generated_openid ||
+    item.openid ||
+    item._openid ||
+    ''
+  )
+
   return (
     <section className="workspace">
       <div className="sync-panel">
@@ -683,6 +730,8 @@ function ImagesPanel() {
           <SortableTh field="folder" sort={sort} onSort={toggleSort}>目录</SortableTh>
           <th>对象路径</th>
           <SortableTh field="usage" sort={sort} onSort={toggleSort}>用途</SortableTh>
+          <th>使用模型</th>
+          <th>生成用户</th>
           <SortableTh field="lastModified" sort={sort} onSort={toggleSort}>云存储时间</SortableTh>
           <th>URL</th><th></th>
         </tr></thead>
@@ -690,7 +739,7 @@ function ImagesPanel() {
           <tr key={item._id}>
             <td className="select-col"><input type="checkbox" checked={selectedIds.includes(item._id)} onChange={() => toggleSelected(item._id)} /></td>
             <td>{item.temporaryUrl ? <button type="button" className="thumb-button" onClick={() => setPreviewAsset(item)} title="预览大图"><img className="thumb" src={item.temporaryUrl} alt={item.name} /></button> : '-'}</td>
-            <td>{item.name}</td><td>{item.folder || '-'}</td><td className="mono">{item.objectKey || item.cloudPath || item.fileID}</td><td>{item.usage || '-'}</td><td>{formatDate(item.lastModified || item.createdAt)}</td>
+            <td>{item.name}</td><td>{item.folder || '-'}</td><td className="mono">{item.objectKey || item.cloudPath || item.fileID}</td><td>{item.usage || '-'}</td><td>{getImageModelLabel(item)}</td><td>{getImageOwnerOpenid(item)}</td><td>{formatDate(item.lastModified || item.createdAt)}</td>
             <td><IconButton title="复制URL" onClick={() => copy(item.temporaryUrl || item.fileID)}><Copy size={16} /></IconButton></td>
             <td className="row-actions"><button onClick={() => edit(item)}>编辑</button><IconButton title="删除" onClick={() => remove(item._id)}><Trash2 size={16} /></IconButton></td>
           </tr>
@@ -762,13 +811,39 @@ function formatDuration(ms = 0) {
 
 function normalizeFeatureForm(form = {}) {
   const templateType = form.template_type === 'text_to_image' ? 'text_to_image' : 'image_to_image'
+  const placements = normalizePlacements(form.placements, form.group)
   return {
     ...form,
+    group: placements[0]?.group || '',
+    placements,
     template_type: templateType,
     enable_upscale_print: !!form.enable_upscale_print,
     upload_count: templateType === 'text_to_image' ? 0 : Number(form.upload_count || 1),
     input_fields: templateType === 'text_to_image' ? normalizeInputFields(form.input_fields) : []
   }
+}
+
+function normalizePlacements(placements = [], legacyGroup = '') {
+  const list = Array.isArray(placements) ? placements : []
+  const normalized = list
+    .map((item) => ({
+      zone: item?.zone === 'boss' ? 'boss' : 'play',
+      group: String(item?.group || '').trim()
+    }))
+    .filter((item) => item.group)
+  if (normalized.length > 0) return normalized
+  return legacyGroup ? [{ zone: 'play', group: legacyGroup }] : [{ zone: 'play', group: '' }]
+}
+
+function getGroupsForZone(groups = [], zone = 'play') {
+  return (groups || []).filter((item) => (item.zone || 'play') === zone).map((item) => item.name)
+}
+
+function formatPlacements(placements = [], legacyGroup = '') {
+  return normalizePlacements(placements, legacyGroup)
+    .filter((item) => item.group)
+    .map((item) => `${ZONE_LABELS[item.zone] || item.zone}/${item.group}`)
+    .join('、') || '-'
 }
 
 function getSelectedModel(models = [], modelCallId = '') {
@@ -956,7 +1031,8 @@ function FeatureDebugPanel({ form, editingId }) {
 function FeaturesPanel() {
   const [sort, toggleSort] = useSort('createdAt', 'desc')
   const [imageFolder, setImageFolder] = useState('')
-  const { items, refs, loading, error, reload, pagination } = useAdminList('listFeatures', [sort.sortBy, sort.sortOrder, imageFolder], () => ({ ...sort, imageFolder }))
+  const [tableZone, setTableZone] = useState('boss')
+  const { items, refs, loading, error, reload, pagination } = useAdminList('listFeatures', [sort.sortBy, sort.sortOrder, imageFolder, tableZone], () => ({ ...sort, imageFolder, zone: tableZone }))
   const [form, setForm] = useState(EMPTY_FEATURE)
   const [editingId, setEditingId] = useState('')
   const [featureMessage, setFeatureMessage] = useState('')
@@ -1097,6 +1173,24 @@ function FeaturesPanel() {
     setForm({ ...form, prompt: `${form.prompt || ''}{${key}}` })
   }
 
+  const updatePlacement = (index, patch) => {
+    const placements = [...(form.placements || [])]
+    placements[index] = { ...placements[index], ...patch }
+    setForm({ ...form, placements })
+  }
+
+  const addPlacement = () => {
+    setForm({
+      ...form,
+      placements: [...(form.placements || []), { zone: 'play', group: '' }]
+    })
+  }
+
+  const removePlacement = (index) => {
+    const placements = (form.placements || []).filter((_, itemIndex) => itemIndex !== index)
+    setForm({ ...form, placements: placements.length ? placements : [{ zone: 'play', group: '' }] })
+  }
+
   return (
     <section className="workspace">
       <Editor
@@ -1122,7 +1216,19 @@ function FeaturesPanel() {
         )}
       >
         <Field label="名称"><TextInput value={form.name} onChange={(value) => setForm({ ...form, name: value })} /></Field>
-        <Field label="分组"><Select value={form.group} onChange={(value) => setForm({ ...form, group: value })} options={(refs.groups || []).map((item) => item.name)} /></Field>
+        <div className="input-field-editor form-wide">
+          <div className="editor-subhead">
+            <strong>归属配置</strong>
+            <button type="button" className="secondary-button" onClick={addPlacement}><Plus size={14} />添加归属</button>
+          </div>
+          {(form.placements || []).map((placement, index) => (
+            <div className="input-field-row" key={`placement_${index}`}>
+              <Select value={placement.zone || 'play'} onChange={(value) => updatePlacement(index, { zone: value || 'play', group: '' })} options={ZONE_OPTIONS} labels={ZONE_LABELS} />
+              <Select value={placement.group} onChange={(value) => updatePlacement(index, { group: value })} options={getGroupsForZone(refs.groups || [], placement.zone || 'play')} />
+              <IconButton type="button" title="删除归属" onClick={() => removePlacement(index)}><Trash2 size={16} /></IconButton>
+            </div>
+          ))}
+        </div>
         <Field label="模型"><Select value={form.model_call_id} onChange={(value) => updateModelSelection({ model_call_id: value })} options={(refs.models || []).map((item) => item.model_call_id)} /></Field>
         <Field label="兜底模型"><Select value={form.fallback_model_call_id} onChange={(value) => updateModelSelection({ fallback_model_call_id: value })} options={(refs.models || []).map((item) => item.model_call_id)} /></Field>
         {showToapisSize ? (
@@ -1190,11 +1296,25 @@ function FeaturesPanel() {
         {featureError ? <p className="error-text form-wide">{featureError}</p> : null}
         {featureMessage ? <p className="success-text form-wide">{featureMessage}</p> : null}
       </Editor>
+      <div className="table-tabs" role="tablist" aria-label="卡片专区">
+        {ZONE_OPTIONS.map((zone) => (
+          <button
+            key={zone}
+            type="button"
+            role="tab"
+            aria-selected={tableZone === zone}
+            className={tableZone === zone ? 'active' : ''}
+            onClick={() => setTableZone(zone)}
+          >
+            {ZONE_LABELS[zone]}
+          </button>
+        ))}
+      </div>
       <DataTable loading={loading} error={error} onRefresh={reload} pagination={pagination}>
         <thead><tr>
           <th>模板ID</th>
           <SortableTh field="name" sort={sort} onSort={toggleSort}>名称</SortableTh>
-          <SortableTh field="group" sort={sort} onSort={toggleSort}>分组</SortableTh>
+          <th>归属</th>
           <SortableTh field="model_call_id" sort={sort} onSort={toggleSort}>模型</SortableTh>
           <th>Fallback</th>
           <SortableTh field="points_cost" sort={sort} onSort={toggleSort}>消耗</SortableTh>
@@ -1212,7 +1332,7 @@ function FeaturesPanel() {
               <span title={item._id}>{item._id}</span>
               <IconButton title="复制模板ID" onClick={() => copyTemplateId(item._id)}><Copy size={16} /></IconButton>
             </td>
-            <td>{item.name}</td><td>{item.group}</td><td>{item.model_call_id}</td><td>{item.fallback_model_call_id || '-'}</td><td>{item.points_cost}</td><td>{item.hang_count || 0}</td><td>{item.la_count || 0}</td><td>{FEATURE_STATUS_LABELS[item.status] || item.status}</td><td>{item.has_draft ? '有' : '-'}</td><td>{item.sort}</td><td>{formatDate(item.createdAt)}</td>
+            <td>{item.name}</td><td>{formatPlacements(item.placements, item.group)}</td><td>{item.model_call_id}</td><td>{item.fallback_model_call_id || '-'}</td><td>{item.points_cost}</td><td>{item.hang_count || 0}</td><td>{item.la_count || 0}</td><td>{FEATURE_STATUS_LABELS[item.status] || item.status}</td><td>{item.has_draft ? '有' : '-'}</td><td>{item.sort}</td><td>{formatDate(item.createdAt)}</td>
             <td className="row-actions"><button onClick={() => edit(item)}>编辑</button><IconButton title="删除" onClick={() => remove(item._id)}><Trash2 size={16} /></IconButton></td>
           </tr>
         ))}</tbody>

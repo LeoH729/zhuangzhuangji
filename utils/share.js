@@ -1,4 +1,4 @@
-const HOME_PATH = '/pages/index/index'
+const HOME_PATH = '/pages/boss-zone/boss-zone'
 
 const HOME_SHARE_TITLE = 'Ai造梦 - 上传照片，一键生成梦图'
 
@@ -13,6 +13,16 @@ const DEFAULT_TIMELINE_TITLES = [
 
 const ROUTE_SHARE_MAP = {
   'pages/index/index': {
+    title: HOME_SHARE_TITLE,
+    path: HOME_PATH,
+    timelineTitles: DEFAULT_TIMELINE_TITLES
+  },
+  'pages/boss-zone/boss-zone': {
+    title: HOME_SHARE_TITLE,
+    path: HOME_PATH,
+    timelineTitles: DEFAULT_TIMELINE_TITLES
+  },
+  'pages/play-zone/play-zone': {
     title: HOME_SHARE_TITLE,
     path: HOME_PATH,
     timelineTitles: DEFAULT_TIMELINE_TITLES
@@ -100,7 +110,7 @@ function fillTemplate(template, values = {}) {
 function getCurrentRoute() {
   const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []
   const current = pages[pages.length - 1]
-  return current && current.route ? current.route : 'pages/index/index'
+  return current && current.route ? current.route : 'pages/boss-zone/boss-zone'
 }
 
 function getDefaultShareConfig(route = getCurrentRoute()) {

@@ -812,6 +812,156 @@ async function callSupersoloAsync(cloud, modelConfig, feature, imageUrls, option
   return { status: 'completed', resultImageUrl, upstreamTaskId, upstreamStatus }
 }
 
+function buildJimengRequestConfig(modelConfig = {}) {
+  const headers = {
+    'Content-Type': 'application/json'
+  }
+  if (modelConfig.api_key) {
+    headers.Authorization = `Bearer ${modelConfig.api_key}`
+  }
+  return {
+    headers,
+    timeout: STATUS_REQUEST_TIMEOUT_MS
+  }
+}
+
+function normalizeJimengBaseUrl(modelConfig = {}) {
+  const baseUrl = normalizeBaseUrl(modelConfig.base_url)
+  if (!baseUrl) {
+    throw new Error('即梦 CLI 包装服务缺少 base_url')
+  }
+  return baseUrl
+}
+
+function resolveJimengRatio(modelConfig = {}, feature = {}) {
+  const featureSize = String(feature.size || '').trim()
+  if (featureSize) return featureSize
+  const modelRatio = String(modelConfig.ratio || modelConfig.size || '').trim()
+  return modelRatio || '1:1'
+}
+
+function resolveJimengResolutionType(modelConfig = {}) {
+  return String(modelConfig.resolution_type || modelConfig.resolutionType || '').trim() || '2k'
+}
+
+function normalizeJimengStatus(status = '') {
+  return String(status || '').toLowerCase()
+}
+
+function isJimengPendingStatus(status = '') {
+  return ['querying', 'queued', 'in_progress', 'pending', 'running'].includes(normalizeJimengStatus(status))
+}
+
+function isJimengCompletedStatus(status = '') {
+  return ['success', 'succeeded', 'completed'].includes(normalizeJimengStatus(status))
+}
+
+function getJimengImageDataUrl(wrapperRes = {}) {
+  const imageData = Array.isArray(wrapperRes.image_data) ? wrapperRes.image_data : []
+  const first = imageData[0] || {}
+  return first.data_url || first.dataUrl || ''
+}
+
+function parseJimengResultUrl(wrapperRes = {}) {
+  const imageUrls = Array.isArray(wrapperRes.image_urls) ? wrapperRes.image_urls : []
+  return imageUrls[0] || wrapperRes.image_url || wrapperRes.url || wrapperRes.result_url || ''
+}
+
+async function createJimengTask(cloud, modelConfig, feature, imageUrls, options = {}) {
+  const httpImageUrl = await resolveHttpImageUrl(cloud, imageUrls)
+  const payload = {
+    prompt: feature.prompt || '',
+    ratio: resolveJimengRatio(modelConfig, feature),
+    resolution_type: resolveJimengResolutionType(modelConfig),
+    model_version: modelConfig.model_id || '',
+    generate_num: 1
+  }
+  if (options.clientBusinessId) {
+    payload.client_business_id = options.clientBusinessId
+  }
+
+  const baseUrl = normalizeJimengBaseUrl(modelConfig)
+  const endpoint = httpImageUrl ? '/jimeng/image2image' : '/jimeng/text2image'
+  if (httpImageUrl) {
+    payload.image_urls = [httpImageUrl]
+  }
+
+  const response = await axios.post(
+    `${baseUrl}${endpoint}`,
+    payload,
+    buildJimengRequestConfig(modelConfig)
+  )
+  return response.data
+}
+
+async function fetchJimengTaskStatus(modelConfig, taskId) {
+  const baseUrl = normalizeJimengBaseUrl(modelConfig)
+  const response = await axios.get(
+    `${baseUrl}/jimeng/result`,
+    {
+      ...buildJimengRequestConfig(modelConfig),
+      params: {
+        submit_id: taskId
+      }
+    }
+  )
+  return response.data
+}
+
+async function callJimengCli(cloud, modelConfig, feature, imageUrls, options = {}) {
+  let wrapperRes = null
+  if (options.upstreamTaskId) {
+    wrapperRes = await fetchJimengTaskStatus(modelConfig, options.upstreamTaskId)
+  } else {
+    wrapperRes = await createJimengTask(cloud, modelConfig, feature, imageUrls, options)
+  }
+
+  if (!wrapperRes) {
+    throw new Error('即梦 CLI 包装服务返回为空')
+  }
+  if (wrapperRes.error) {
+    const message = wrapperRes.error.message || wrapperRes.message || JSON.stringify(wrapperRes.error)
+    throw new Error(`即梦 CLI 执行失败: ${message}`)
+  }
+
+  const upstreamTaskId = wrapperRes.submit_id || wrapperRes.submitId || options.upstreamTaskId || ''
+  const upstreamStatus = wrapperRes.status || ''
+
+  if (isJimengPendingStatus(upstreamStatus)) {
+    return {
+      status: 'pending',
+      upstreamTaskId,
+      upstreamStatus: upstreamStatus || 'querying'
+    }
+  }
+
+  if (normalizeJimengStatus(upstreamStatus) === 'failed') {
+    throw new Error(`即梦 CLI 任务失败: ${JSON.stringify(wrapperRes)}`)
+  }
+
+  if (!isJimengCompletedStatus(upstreamStatus)) {
+    return {
+      status: 'pending',
+      upstreamTaskId,
+      upstreamStatus: upstreamStatus || 'unknown'
+    }
+  }
+
+  const remoteUrl = parseJimengResultUrl(wrapperRes)
+  const dataUrl = getJimengImageDataUrl(wrapperRes)
+  const resultImageUrl = await materializeImageUrl(cloud, remoteUrl || dataUrl)
+  if (!resultImageUrl) {
+    throw new Error('即梦 CLI 任务已完成但未返回可转存图片')
+  }
+
+  return {
+    status: 'completed',
+    resultImageUrl,
+    upstreamTaskId,
+    upstreamStatus
+  }
+}
+
 async function executeGeneration(cloud, modelConfig, feature, imageUrls, options = {}) {
   if (modelConfig.provider === 'toapis') {
     return callToapis(cloud, modelConfig, feature, imageUrls, options)
@@ -836,8 +986,8 @@ async function executeGeneration(cloud, modelConfig, feature, imageUrls, options
   if (modelConfig.provider === 'supersolo_async') {
     return callSupersoloAsync(cloud, modelConfig, feature, imageUrls, options)
   }
-  if (modelConfig.provider === 'toapis') {
-    return callToapis(cloud, modelConfig, feature, imageUrls, options)
+  if (modelConfig.provider === 'jimeng_cli') {
+    return callJimengCli(cloud, modelConfig, feature, imageUrls, options)
   }
 
   throw new Error(`暂不支持的 provider: ${modelConfig.provider}`)

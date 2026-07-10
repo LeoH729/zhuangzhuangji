@@ -12,14 +12,18 @@ const {
   fillTemplate,
   pickRandom
 } = require('../../utils/share.js')
-const { report } = require('../../utils/analytics.js')
+const { report, reportGenerationFailed } = require('../../utils/analytics.js')
+const { showRewardedVideo } = require('../../utils/rewarded-video.js')
 
 const FEATURE_DETAIL_CACHE_PREFIX = 'feature_detail_cache_'
 
 Page({
   data: {
+    boostModalVisible: false,
+    boostTaskId: '',
     generationNotice: { visible: false, taskId: '', message: '' },
     id: '',
+    sourceZone: '',
     feature: null,
     images: [],
     inputFields: [],
@@ -34,8 +38,11 @@ Page({
     app.syncGenerationNoticeToPage(this)
     const sceneId = await this.parseFeatureScene(options.scene)
     const id = options.id ? decodeURIComponent(options.id) : sceneId
+    const sourceZone = options.sourceZone === 'boss' || options.sourceZone === 'play'
+      ? options.sourceZone
+      : ''
     if (id) {
-      this.setData({ id })
+      this.setData({ id, sourceZone })
       this.fetchDetail(id)
     } else {
       this.goToUnavailable()
@@ -350,22 +357,134 @@ Page({
         template_type: this.data.isTextToImage ? 'text_to_image' : 'image_to_image'
       })
       
-      // 2. Go to generating page (analyzing)
+      const createRes = await wx.cloud.callFunction({
+        name: 'aiGenerate',
+        data: {
+          action: 'createTask',
+          featureId: this.data.id,
+          imageUrls: fileIDs,
+          inputValues: this.data.inputValues || {}
+        }
+      })
+      const result = createRes.result
+      if (!result || !result.success || !result.taskId) {
+        report('generation_submit_failed', {
+          feature_id: this.data.id,
+          feature_name: feature.name || '',
+          feature_group: feature.group || '',
+          template_type: this.data.isTextToImage ? 'text_to_image' : 'image_to_image',
+          source: 'feature',
+          error_type: 'create_task',
+          error_msg: (result && (result.error || result.message)) || 'create task failed'
+        })
+        wx.hideLoading()
+        this.setData({ isGenerating: false })
+        wx.showToast({ title: (result && (result.error || result.message)) || '提交任务失败', icon: 'none' })
+        return
+      }
+
       wx.hideLoading()
       this.setData({ isGenerating: false })
-      
-      const encodedFileIDs = encodeURIComponent(JSON.stringify(fileIDs))
-      const encodedInputValues = encodeURIComponent(JSON.stringify(this.data.inputValues || {}))
-      wx.navigateTo({
-        url: `/pages/analyzing/analyzing?featureId=${this.data.id}&images=${encodedFileIDs}&inputValues=${encodedInputValues}`
-      })
+      // 弹窗或激励视频期间由当前页面负责跳转，避免 watcher 抢先显示完成横幅。
+      app.trackGenerationTask(result.taskId, { suppressBanner: true })
+      this.showGenerationBoostModal(result.taskId)
       
     } catch (err) {
       wx.hideLoading()
       this.setData({ isGenerating: false })
       console.error(err)
+      report('generation_submit_failed', {
+        feature_id: this.data.id,
+        feature_name: feature.name || '',
+        feature_group: feature.group || '',
+        template_type: this.data.isTextToImage ? 'text_to_image' : 'image_to_image',
+        source: 'feature',
+        error_type: 'upload_or_submit',
+        error_msg: err && (err.errMsg || err.message) || ''
+      })
       wx.showToast({ title: '上传失败', icon: 'none' })
     }
+  },
+
+  showGenerationBoostModal(taskId) {
+    this.setData({
+      boostModalVisible: true,
+      boostTaskId: taskId
+    })
+  },
+
+  async onBoostModalConfirm() {
+    const taskId = this.data.boostTaskId
+    if (!taskId) return
+    this.setData({ boostModalVisible: false })
+    await this.handleBoostGeneration(taskId)
+  },
+
+  onBoostModalCancel() {
+    const taskId = this.data.boostTaskId
+    this.setData({ boostModalVisible: false })
+    if (taskId) {
+      this.goToAnalyzingWithTask(taskId, false)
+    }
+  },
+
+  async handleBoostGeneration(taskId) {
+    try {
+      const adRes = await showRewardedVideo({ scene: 'generation_boost' })
+      if (!adRes || !adRes.completed) {
+        wx.showToast({ title: '完整观看后可加速生成', icon: 'none' })
+        this.goToAnalyzingWithTask(taskId, false)
+        return
+      }
+    } catch (err) {
+      wx.showToast({ title: (err && err.message) || '广告加载失败，继续生成中', icon: 'none' })
+      this.goToAnalyzingWithTask(taskId, false)
+      return
+    }
+
+    wx.showLoading({ title: '检查结果中...', mask: true })
+    try {
+      const statusRes = await wx.cloud.callFunction({
+        name: 'aiGenerate',
+        data: {
+          action: 'getTaskStatus',
+          taskId
+        }
+      })
+      wx.hideLoading()
+      const task = statusRes && statusRes.result && statusRes.result.task
+      if (task && task.status === 'succeeded' && task.historyId) {
+        app.finishTrackedGenerationTask(taskId, { silent: true })
+        wx.navigateTo({
+          url: `/pages/result/result?id=${encodeURIComponent(task.historyId)}&featureId=${encodeURIComponent(task.featureId || this.data.id)}${this.data.sourceZone ? `&sourceZone=${this.data.sourceZone}` : ''}`
+        })
+        return
+      }
+      if (task && task.status === 'failed') {
+        reportGenerationFailed(Object.assign({}, task, { taskId: taskId }), 'analyzing')
+        app.finishTrackedGenerationTask(taskId, { silent: true })
+        wx.showModal({
+          title: '生图失败',
+          content: '因网络原因导致生图失败，您的星光已返还，请返回重试',
+          showCancel: false,
+          confirmText: '确认'
+        })
+        return
+      }
+      this.goToAnalyzingWithTask(taskId, true)
+    } catch (err) {
+      wx.hideLoading()
+      console.error('[Feature] boost status check failed:', err)
+      this.goToAnalyzingWithTask(taskId, true)
+    }
+  },
+
+  goToAnalyzingWithTask(taskId, boosted) {
+    // 已进入生成中页后恢复默认提醒：用户之后离开该页面仍可收到完成横幅。
+    app.setGenerationTaskBannerSuppressed(taskId, false)
+    wx.navigateTo({
+      url: `/pages/analyzing/analyzing?featureId=${encodeURIComponent(this.data.id)}&taskId=${encodeURIComponent(taskId)}&boosted=${boosted ? '1' : '0'}${this.data.sourceZone ? `&sourceZone=${this.data.sourceZone}` : ''}`
+    })
   },
 
   async ensureEnoughPointsBeforeGenerate(feature) {

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://static.cloudbase.net/cli/cloudbaserc.schema.json",
+  "envId": "cloudbase-5gmfinom29f48930",
+  "functionRoot": "cloudfunctions",
+  "functions": [
+    {
+      "name": "adminApi",
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "timeout": 15
+    },
+    {
+      "name": "featureConfig",
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "timeout": 15
+    }
+  ]
+}

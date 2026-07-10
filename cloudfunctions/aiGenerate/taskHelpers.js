@@ -8,7 +8,7 @@ const RUNNING_TIMEOUT_MS = 16 * 60 * 1000
 const UPSTREAM_POLL_INTERVAL_MS = 10000
 const TEMPLATE_TYPE_IMAGE = 'image_to_image'
 const TEMPLATE_TYPE_TEXT = 'text_to_image'
-const TEXT_TO_IMAGE_PROVIDERS = ['volcengine', 'supersolo', 'supersolo_async', 'toapis', 'joapi']
+const TEXT_TO_IMAGE_PROVIDERS = ['volcengine', 'supersolo', 'supersolo_async', 'toapis', 'joapi', 'jimeng_cli']
 
 function normalizeTemplateType(value) {
   return value === TEMPLATE_TYPE_TEXT ? TEMPLATE_TYPE_TEXT : TEMPLATE_TYPE_IMAGE
@@ -103,6 +103,12 @@ function buildTaskResponse(task) {
     historyId: task.historyId || '',
     errorMessage: task.errorMessage || '',
     templateType: task.templateType || TEMPLATE_TYPE_IMAGE,
+    provider: task.provider || '',
+    modelCallId: task.modelCallId || task.modelCallIdSnapshot || '',
+    fallbackUsed: !!task.fallbackUsed,
+    activeModelRole: task.activeModelRole || '',
+    primaryErrorMessage: task.primaryErrorMessage || '',
+    fallbackErrorMessage: task.fallbackErrorMessage || '',
     inputValues: task.inputValues || {},
     compiledPrompt: task.compiledPrompt || task.promptSnapshot || '',
     createdAt: task.createdAt || null,

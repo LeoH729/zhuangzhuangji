@@ -23,6 +23,7 @@ Page({
   data: {
     id: '',
     featureId: '',
+    sourceZone: 'play',
     featureName: 'AI生图魔法',
     resultUrl: '',
     previewImage: createImageState('', IMAGE_STYLES.RESULT_PREVIEW),
@@ -56,7 +57,11 @@ Page({
 
   onLoad(options) {
     this.reportResultView(options)
-    this.setData({ isSharedResult: options.shared === '1' && !!options.featureId })
+    const isSharedResult = options.shared === '1' && !!options.featureId
+    const sourceZone = !isSharedResult && (options.sourceZone === 'boss' || options.sourceZone === 'play')
+      ? options.sourceZone
+      : 'play'
+    this.setData({ isSharedResult, sourceZone })
     if (options.id) {
       const resultUrl = options.url ? decodeURIComponent(options.url) : ''
       this.setResultUrl(resultUrl, {
@@ -119,7 +124,7 @@ Page({
 
   goGenerateSame() {
     if (!this.data.featureId) {
-      wx.switchTab({ url: '/pages/index/index' })
+      wx.switchTab({ url: '/pages/boss-zone/boss-zone' })
       return
     }
     report('result_generate_same_click', {
@@ -909,8 +914,9 @@ Page({
   },
 
   goHome() {
+    const targetZone = !this.data.isSharedResult && this.data.sourceZone === 'boss' ? 'boss' : 'play'
     wx.switchTab({
-      url: '/pages/index/index'
+      url: targetZone === 'boss' ? '/pages/boss-zone/boss-zone' : '/pages/play-zone/play-zone'
     })
   },
 

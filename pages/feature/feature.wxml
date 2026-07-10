@@ -77,3 +77,10 @@
     <view class="action-tips">将使用AI生图技术生成</view>
   </view>
 </view>
+
+<reward-modal
+  visible="{{boostModalVisible}}"
+  variant="boost"
+  bind:confirm="onBoostModalConfirm"
+  bind:cancel="onBoostModalCancel"
+></reward-modal>

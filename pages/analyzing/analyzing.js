@@ -1,5 +1,5 @@
 const app = getApp()
-const { report } = require('../../utils/analytics.js')
+const { report, reportGenerationFailed } = require('../../utils/analytics.js')
 
 const POLL_INTERVAL_MS = 8000
 const POLL_TIMEOUT_MS = 16 * 60 * 1000
@@ -11,6 +11,7 @@ const DEFAULT_GENERATION_DONE_TEMPLATE_ID = 'sAjTlnxEzFarfa55Rl_X6wBU7lBt8HXiEcF
 Page({
   data: {
     featureId: '',
+    sourceZone: '',
     images: [],
     inputValues: {},
     progress: 5,
@@ -30,11 +31,42 @@ Page({
 
   onLoad(options) {
     this.initSnakeGame()
+    const sourceZone = options.sourceZone === 'boss' || options.sourceZone === 'play'
+      ? options.sourceZone
+      : ''
+    if (options.taskId) {
+      const taskId = decodeURIComponent(options.taskId)
+      const featureId = options.featureId ? decodeURIComponent(options.featureId) : ''
+      this.setData({
+        featureId,
+        sourceZone,
+        taskId
+      })
+      this.pollStartedAt = Date.now()
+      this.lastEnsureWorkerAt = 0
+      this.hasReportedLeave = false
+      report('generation_wait_view', {
+        feature_id: featureId,
+        task_id: taskId,
+        source: options.boosted === '1' ? 'boosted' : 'task'
+      })
+      this.loadNotificationConfig()
+      this.startProgress()
+      this.startGenerationTimer()
+      app.trackGenerationTask(taskId)
+      this.pollInterval = setInterval(() => {
+        this.pollTaskStatus(taskId)
+      }, POLL_INTERVAL_MS)
+      this.pollTaskStatus(taskId)
+      return
+    }
+
     if (options.featureId) {
       const images = options.images ? JSON.parse(decodeURIComponent(options.images)) : []
       const inputValues = options.inputValues ? JSON.parse(decodeURIComponent(options.inputValues)) : {}
       this.setData({
         featureId: options.featureId,
+        sourceZone,
         images,
         inputValues
       })
@@ -409,6 +441,12 @@ Page({
       const result = createRes.result
       if (!result || !result.success || !result.taskId) {
         this.stopProgress()
+        report('generation_submit_failed', {
+          feature_id: this.data.featureId,
+          source: 'analyzing',
+          error_type: 'create_task',
+          error_msg: (result && (result.error || result.message)) || 'create task failed'
+        })
         wx.showToast({ title: (result && result.error) || '提交任务失败', icon: 'none' })
         setTimeout(() => wx.navigateBack(), 2000)
         return
@@ -523,6 +561,7 @@ Page({
 
       if (task.status === 'failed') {
         this.stopGenerationTimer()
+        reportGenerationFailed(Object.assign({}, task, { taskId: taskId }), 'analyzing')
         app.finishTrackedGenerationTask(taskId, { silent: true })
         this.showGenerationFailedModal(task)
       }
@@ -565,7 +604,7 @@ Page({
     this.leavingAfterFailure = true
     if (featureId) {
       wx.redirectTo({
-        url: `/pages/feature/feature?id=${encodeURIComponent(featureId)}`
+        url: `/pages/feature/feature?id=${encodeURIComponent(featureId)}${this.data.sourceZone ? `&sourceZone=${this.data.sourceZone}` : ''}`
       })
       return
     }
@@ -588,6 +627,9 @@ Page({
     }
     if (this.data.resultUrl) {
       params.push(`url=${encodeURIComponent(this.data.resultUrl)}`)
+    }
+    if (this.data.sourceZone) {
+      params.push(`sourceZone=${this.data.sourceZone}`)
     }
     wx.redirectTo({
       url: `/pages/result/result?${params.join('&')}`
@@ -617,7 +659,7 @@ Page({
     this.goingHome = true
     this.reportWaitLeave('browse_other')
     wx.switchTab({
-      url: '/pages/index/index'
+      url: '/pages/boss-zone/boss-zone'
     })
   },
 

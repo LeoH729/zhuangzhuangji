@@ -1,90 +1,127 @@
 const cloud = require('wx-server-sdk')
-cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
-const db = cloud.database()
 
-exports.main = async (event, context) => {
-  const { action, payload } = event
+cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
+
+const db = cloud.database()
+const ZONES = ['boss', 'play']
+
+function normalizeZone(zone) {
+  return ZONES.includes(zone) ? zone : 'play'
+}
+
+function normalizePlacements(feature = {}) {
+  if (Array.isArray(feature.placements) && feature.placements.length > 0) {
+    return feature.placements
+      .map(item => ({
+        zone: normalizeZone(item && item.zone),
+        group: String(item && item.group || '').trim()
+      }))
+      .filter(item => item.zone && item.group)
+  }
+
+  const legacyGroup = String(feature.group || '').trim()
+  return legacyGroup ? [{ zone: 'play', group: legacyGroup }] : []
+}
+
+function matchesPlacement(feature = {}, zone = 'play', group = '') {
+  if (!group) return false
+  const placements = normalizePlacements(feature)
+  return placements.some(item => item.zone === zone && item.group === group)
+}
+
+function getTimeMs(item = {}) {
+  const value = item.createdAt || item.createTime
+  if (!value) return 0
+  if (value instanceof Date) return value.getTime()
+  if (typeof value.getTime === 'function') return value.getTime()
+  if (value.$date) return new Date(value.$date).getTime() || 0
+  return new Date(value).getTime() || 0
+}
+
+function sortFeatures(features = []) {
+  features.sort((a, b) => {
+    const tagA = a.tag || 'normal'
+    const tagB = b.tag || 'normal'
+    const getTagWeight = (tag) => {
+      if (tag === 'new') return 3
+      if (tag === 'hot') return 2
+      return 1
+    }
+
+    const weightA = getTagWeight(tagA)
+    const weightB = getTagWeight(tagB)
+    if (weightA !== weightB) return weightB - weightA
+
+    const timeA = getTimeMs(a)
+    const timeB = getTimeMs(b)
+    if (tagA === 'new' || tagA === 'hot') return timeB - timeA
+
+    const hangA = a.hang_count || 0
+    const hangB = b.hang_count || 0
+    if (hangA !== hangB) return hangB - hangA
+    return timeB - timeA
+  })
+  return features
+}
+
+exports.main = async (event = {}) => {
+  const { action, payload = {} } = event
   const collection = db.collection('ai_features')
-  
+  const zone = normalizeZone(payload.zone)
+
   try {
     switch (action) {
-      case 'getGroups':
+      case 'getGroups': {
         try {
-          const groupRes = await db.collection('ai_groups').where({ status: 1 }).orderBy('sort', 'asc').get()
+          const groupRes = await db.collection('ai_groups').where({ status: 1, zone }).orderBy('sort', 'asc').get()
           if (groupRes.data && groupRes.data.length > 0) {
-            const groups = groupRes.data.map(item => item.name)
+            const groups = groupRes.data.map(item => item.name).filter(Boolean)
             return { success: true, data: groups }
           }
         } catch (groupError) {
-          console.warn('获取 ai_groups 失败，自动降级去重提取分组列表:', groupError)
+          console.warn('get ai_groups failed, fallback to feature placements', groupError)
         }
-        // 降级防错：从 active features 中提取去重分组
-        const { data } = await collection.where({ status: 1 }).field({ group: true }).get()
-        const groups = [...new Set(data.map(item => item.group).filter(Boolean))]
-        return { success: true, data: groups }
-      
-      case 'getList':
-        // 获取所有激活卡片，可选分组过滤
-        const query = { status: 1 }
-        if (payload?.group && payload.group !== '全部') {
-          query.group = payload.group
-        }
-        // 云函数默认最多返回 100 条记录
-        const res = await collection.where(query).get()
-        const features = res.data || []
-        
-        // 内存精细组合排序：new (创建时间 desc) > hot (创建时间 desc) > normal (夯数 desc, 创建时间 desc)
-        features.sort((a, b) => {
-          const tagA = a.tag || 'normal'
-          const tagB = b.tag || 'normal'
-          
-          const getTagWeight = (tag) => {
-            if (tag === 'new') return 3
-            if (tag === 'hot') return 2
-            return 1 // 'normal'
-          }
-          
-          const weightA = getTagWeight(tagA)
-          const weightB = getTagWeight(tagB)
-          
-          if (weightA !== weightB) {
-            return weightB - weightA // 权重降序：new(3) > hot(2) > normal(1)
-          }
-          
-          const timeA = a.createTime ? (a.createTime instanceof Date ? a.createTime.getTime() : new Date(a.createTime).getTime()) : 0
-          const timeB = b.createTime ? (b.createTime instanceof Date ? b.createTime.getTime() : new Date(b.createTime).getTime()) : 0
-          
-          if (tagA === 'new' || tagA === 'hot') {
-            return timeB - timeA // new 或 hot：按创建时间倒序
-          } else {
-            // normal：按夯数倒序，夯数相同时按时间倒序
-            const hangA = a.hang_count || 0
-            const hangB = b.hang_count || 0
-            if (hangA !== hangB) {
-              return hangB - hangA
-            }
-            return timeB - timeA
-          }
+
+        const { data } = await collection.where({ status: 1 }).field({ group: true, placements: true }).get()
+        const groupSet = new Set()
+        ;(data || []).forEach(item => {
+          normalizePlacements(item).forEach(placement => {
+            if (placement.zone === zone && placement.group) groupSet.add(placement.group)
+          })
         })
-        
+        return { success: true, data: [...groupSet] }
+      }
+
+      case 'getList': {
+        const selectedGroup = String(payload.group || '').trim()
+        if (!selectedGroup) {
+          return { success: true, data: [] }
+        }
+        const res = await collection.where({ status: 1 }).get()
+        const features = sortFeatures((res.data || []).filter(item => matchesPlacement(item, zone, selectedGroup)))
         return { success: true, data: features }
-        
-      case 'getDetail':
+      }
+
+      case 'getDetail': {
         const detailRes = await collection.doc(payload.id).get()
         return { success: true, data: detailRes.data }
-        
-      case 'create':
+      }
+
+      case 'create': {
         const createRes = await collection.add({ data: { ...payload, createTime: db.serverDate() } })
         return { success: true, _id: createRes._id }
-        
-      case 'update':
+      }
+
+      case 'update': {
         const updateRes = await collection.doc(payload.id).update({ data: { ...payload.data, updateTime: db.serverDate() } })
         return { success: true, updated: updateRes.stats.updated }
-        
-      case 'delete':
+      }
+
+      case 'delete': {
         const deleteRes = await collection.doc(payload.id).remove()
         return { success: true, removed: deleteRes.stats.removed }
-        
+      }
+
       default:
         return { success: false, error: 'Unknown action' }
     }

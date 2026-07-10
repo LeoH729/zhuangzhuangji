@@ -16,6 +16,8 @@ const CONFIG_ID = 'global'
 const USER_COLLECTION = 'user_points'
 const HISTORY_COLLECTION = 'points_history'
 const TASK_COLLECTION = 'user_star_tasks'
+const NEW_USER_GIFT_TASK_ID = 'new_user_gift'
+const NEW_USER_GIFT_REWARD = 30
 const RESULT_SHARE_TASK_ID = 'result_share'
 const RESULT_SHARE_TASK_LIMIT = 2
 const RESULT_SHARE_TASK_REWARD = 10
@@ -44,6 +46,12 @@ exports.main = async (event, context) => {
         return await getShareTask(openid)
       case 'claimShareReward':
         return await claimShareReward(openid, event.channel, event.historyId)
+      case 'getNewUserGiftTask':
+        return await getNewUserGiftTask(openid)
+      case 'claimNewUserGift':
+        return await claimNewUserGift(openid)
+      case 'getStarTasks':
+        return await getStarTasks(openid)
       default:
         return { success: false, code: 'UNKNOWN_ACTION', message: '未知操作' }
     }
@@ -384,6 +392,177 @@ async function claimShareReward(openid, channel = '', historyId = '') {
       points: result.points
     }
   }
+}
+
+async function getNewUserGiftTask(openid) {
+  console.log('[points] getNewUserGiftTask', { openid })
+  if (!openid) {
+    return { success: false, code: 'NO_OPENID', message: '用户未登录' }
+  }
+  await ensureUserPoints(openid)
+  const taskId = `${openid}_${NEW_USER_GIFT_TASK_ID}`
+  let task = null
+  try {
+    const res = await db.collection(TASK_COLLECTION).doc(taskId).get()
+    task = res.data
+  } catch (_) { }
+
+  const completedCount = task && task.completed ? 1 : 0
+  return {
+    success: true,
+    data: {
+      taskId: NEW_USER_GIFT_TASK_ID,
+      title: '新人好礼',
+      desc: '观看视频领取新人见面礼',
+      completedCount,
+      limit: 1,
+      reward: NEW_USER_GIFT_REWARD,
+      totalReward: NEW_USER_GIFT_REWARD,
+      completed: completedCount >= 1,
+      completedAt: (task && task.completedAt) || null
+    }
+  }
+}
+
+async function claimNewUserGift(openid) {
+  console.log('[points] claimNewUserGift start', { openid })
+  if (!openid) {
+    return { success: false, code: 'NO_OPENID', message: '用户未登录' }
+  }
+
+  const now = formatDateTime()
+  const taskId = `${openid}_${NEW_USER_GIFT_TASK_ID}`
+  const result = await db.runTransaction(async (transaction) => {
+    let userDoc = null
+    try {
+      userDoc = await transaction.collection(USER_COLLECTION).doc(openid).get()
+    } catch (_) { }
+
+    if (!userDoc || !userDoc.data) {
+      const cfgRes = await getConfig()
+      const initPoints = (cfgRes && cfgRes.data && cfgRes.data.initial_points) || 100
+      await transaction.collection(USER_COLLECTION).doc(openid).set({
+        data: {
+          points: initPoints,
+          name: (cfgRes && cfgRes.data && cfgRes.data.name) || '星光',
+          createdAt: now,
+          updatedAt: now
+        }
+      })
+      userDoc = await transaction.collection(USER_COLLECTION).doc(openid).get()
+    }
+
+    let taskDoc = null
+    try {
+      taskDoc = await transaction.collection(TASK_COLLECTION).doc(taskId).get()
+    } catch (_) { }
+
+    const currentPoints = (userDoc && userDoc.data && userDoc.data.points) || 0
+    if (taskDoc && taskDoc.data && taskDoc.data.completed) {
+      return {
+        rewarded: false,
+        completedCount: 1,
+        points: currentPoints,
+        completed: true
+      }
+    }
+
+    const taskData = {
+      _openid: openid,
+      taskKey: NEW_USER_GIFT_TASK_ID,
+      title: '新人好礼',
+      desc: '观看视频领取新人见面礼',
+      completedCount: 1,
+      limit: 1,
+      reward: NEW_USER_GIFT_REWARD,
+      completed: true,
+      completedAt: now,
+      updatedAt: now
+    }
+
+    if (taskDoc && taskDoc.data) {
+      await transaction.collection(TASK_COLLECTION).doc(taskId).update({ data: taskData })
+    } else {
+      await transaction.collection(TASK_COLLECTION).doc(taskId).set({
+        data: {
+          ...taskData,
+          createdAt: now
+        }
+      })
+    }
+
+    await transaction.collection(USER_COLLECTION).doc(openid).update({
+      data: {
+        points: _.inc(NEW_USER_GIFT_REWARD),
+        updatedAt: now,
+        lastReason: `task_${NEW_USER_GIFT_TASK_ID}`
+      }
+    })
+
+    return {
+      rewarded: true,
+      completedCount: 1,
+      points: currentPoints + NEW_USER_GIFT_REWARD,
+      completed: true
+    }
+  })
+
+  if (result && result.rewarded) {
+    await addHistory(openid, 'recharge', NEW_USER_GIFT_REWARD, `task_${NEW_USER_GIFT_TASK_ID}`, '新人好礼奖励')
+  }
+
+  console.log('[points] claimNewUserGift done', result)
+  return {
+    success: true,
+    data: {
+      taskId: NEW_USER_GIFT_TASK_ID,
+      title: '新人好礼',
+      desc: '观看视频领取新人见面礼',
+      completedCount: result.completedCount,
+      limit: 1,
+      reward: NEW_USER_GIFT_REWARD,
+      totalReward: NEW_USER_GIFT_REWARD,
+      completed: result.completed,
+      rewarded: result.rewarded,
+      points: result.points
+    }
+  }
+}
+
+async function getStarTasks(openid) {
+  if (!openid) {
+    return { success: false, code: 'NO_OPENID', message: '用户未登录' }
+  }
+
+  const giftRes = await getNewUserGiftTask(openid)
+  const shareRes = await getShareTask(openid)
+  const giftTask = giftRes && giftRes.data
+  const shareTask = shareRes && shareRes.data
+  const tasks = []
+
+  if (giftTask) {
+    tasks.push({
+      ...giftTask,
+      title: '新人好礼',
+      desc: '观看视频领取新人见面礼',
+      actionText: giftTask.completed ? '已完成' : '去领取',
+      type: 'claim'
+    })
+  }
+  if (shareTask) {
+    const totalReward = RESULT_SHARE_TASK_LIMIT * RESULT_SHARE_TASK_REWARD
+    tasks.push({
+      ...shareTask,
+      title: `分享图片（${shareTask.completedCount}/${shareTask.limit}）`,
+      desc: '生成图片分享给好友/朋友圈',
+      reward: totalReward,
+      totalReward,
+      actionText: shareTask.completed ? '已完成' : '去完成',
+      type: 'navigate'
+    })
+  }
+
+  return { success: true, data: { tasks } }
 }
 
 async function getHistory(openid, limit = 20, skip = 0) {

@@ -32,11 +32,29 @@
   </view>
 
   <view class="star-task-card">
-    <view class="star-task-title">星光任务</view>
-    <view class="star-task-row {{shareTask.completed ? 'done' : ''}}" bindtap="goToHomeFromTask">
-      <view class="star-task-text">{{shareTask.title}}</view>
-      <view class="star-task-progress {{shareTask.completed ? 'done' : ''}}">{{shareTask.completedCount}}/{{shareTask.limit}}</view>
-    </view>
+    <view class="star-task-title">✨ 星光任务</view>
+    <block wx:if="{{starTasks.length > 0}}">
+      <view wx:for="{{starTasks}}" wx:key="taskId" class="star-task-row {{item.completed ? 'done' : ''}}" bindtap="onStarTaskTap" data-task-id="{{item.taskId}}">
+        <view class="star-task-copy">
+          <view class="star-task-main">
+            <text>{{item.title}}</text>
+            <text class="star-task-reward">✨星光+{{item.displayReward}}</text>
+          </view>
+          <view class="star-task-desc">{{item.desc}}</view>
+        </view>
+        <view class="star-task-action {{item.completed ? 'done' : ''}}">{{item.actionText}}</view>
+      </view>
+    </block>
+    <view wx:elif="{{starTasksLoadFailed}}" class="star-task-retry" bindtap="fetchStarTasks">任务加载失败，点击重试</view>
+    <block wx:else>
+      <view wx:for="{{starTaskSkeletonRows}}" wx:key="*this" class="star-task-skeleton">
+        <view class="star-task-skeleton-copy">
+          <view class="star-task-skeleton-line star-task-skeleton-main"></view>
+          <view class="star-task-skeleton-line star-task-skeleton-desc"></view>
+        </view>
+        <view class="star-task-skeleton-action"></view>
+      </view>
+    </block>
   </view>
 
   <view class="menu-list">
@@ -62,3 +80,5 @@
     </view>
   </view>
 </view>
+
+<reward-modal visible="{{newUserGiftModalVisible}}" variant="gift"></reward-modal>

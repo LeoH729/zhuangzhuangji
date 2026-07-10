@@ -1,7 +1,7 @@
 Page({
   goHome() {
     wx.switchTab({
-      url: '/pages/index/index'
+      url: '/pages/boss-zone/boss-zone'
     })
   }
 })
