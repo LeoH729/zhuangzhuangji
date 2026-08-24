@@ -1,7 +1,7 @@
 {
   "name": "points",
   "version": "1.0.0",
-  "description": "妆妆蛋积分系统云函数",
+  "description": "星光系统云函数",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

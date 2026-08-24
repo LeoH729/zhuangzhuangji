@@ -36,6 +36,21 @@ function isGeminiImageModel(modelConfig = {}) {
   return String(modelConfig.model_id || '').toLowerCase().includes('gemini')
 }
 
+const SUPPORTED_ASPECT_RATIOS = ['1:1', '3:4', '4:3', '4:5', '9:16', '16:9']
+const VOLCENGINE_RATIO_SIZES = {
+  '1:1': '2048x2048',
+  '3:4': '1728x2304',
+  '4:3': '2304x1728',
+  '4:5': '1792x2240',
+  '9:16': '1728x3072',
+  '16:9': '3072x1728'
+}
+
+function resolveAspectRatio(feature = {}, fallback = '1:1') {
+  const value = String(feature.aspectRatio || feature.size || '').trim()
+  return SUPPORTED_ASPECT_RATIOS.includes(value) ? value : fallback
+}
+
 function guessImageExtension(contentType = '', url = '') {
   const lowerType = String(contentType).toLowerCase()
   if (lowerType.includes('webp')) return 'webp'
@@ -354,12 +369,13 @@ async function callCoze(modelConfig, feature, imageUrls) {
 
 async function callVolcengine(cloud, modelConfig, feature, imageUrls) {
   const httpImageUrl = await resolveHttpImageUrl(cloud, imageUrls)
+  const aspectRatio = resolveAspectRatio(feature)
   const payload = {
     model: modelConfig.model_id,
     prompt: feature.prompt || '',
     sequential_image_generation: 'disabled',
     response_format: 'url',
-    size: '2K',
+    size: VOLCENGINE_RATIO_SIZES[aspectRatio],
     stream: false,
     watermark: false
   }
@@ -519,6 +535,7 @@ function findGeminiImagePart(responseData = {}) {
 }
 
 async function callGeminiImage(cloud, modelConfig, feature, httpImageUrl) {
+  const aspectRatio = resolveAspectRatio(feature)
   const parts = [{ text: feature.prompt || '' }]
   if (httpImageUrl) {
     const imageFile = await downloadImageBuffer(httpImageUrl)
@@ -535,7 +552,13 @@ async function callGeminiImage(cloud, modelConfig, feature, httpImageUrl) {
     {
       contents: [{ role: 'user', parts }],
       generationConfig: {
-        responseModalities: ['TEXT', 'IMAGE']
+        responseModalities: ['TEXT', 'IMAGE'],
+        responseFormat: {
+          image: {
+            aspectRatio,
+            imageSize: '2K'
+          }
+        }
       }
     },
     {

@@ -18,6 +18,7 @@ admin-web/dist/
 
 # 临时文件
 tmp/
+.tmp/
 *.tmp
 *.temp
 local-relay-gpt-image-2-*
@@ -27,7 +28,7 @@ Thumbs.db
 .DS_Store
 
 # 微信开发者工具生成的文件
-miniprogram_npm/
+miniprogram/miniprogram_npm/
 .tea/
 
 # 备份文件

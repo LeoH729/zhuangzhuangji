@@ -3,6 +3,7 @@ const { executeGenerationWithFallback } = require('./generationExecutor')
 const {
   createTask,
   getTaskStatus,
+  getTaskStatuses,
   ensureWorker,
   listTasks,
   normalizeTemplateType,
@@ -28,7 +29,8 @@ async function refundPoints(openid, amount, featureId) {
   await cloud.callFunction({
     name: 'points',
     data: {
-      action: 'recharge',
+      action: 'internalRecharge',
+      internalToken: process.env.INTERNAL_FUNCTION_TOKEN,
       amount,
       reason: `refund_${featureId}`,
       title: '生图失败退回',
@@ -79,7 +81,7 @@ async function runSyncGeneration(openid, featureId, imageUrls, inputValues = {})
       if (!deductRes || !deductRes.result || !deductRes.result.success) {
         return {
           success: false,
-          error: (deductRes && deductRes.result && deductRes.result.message) || '积分不足，请先充值'
+          error: (deductRes && deductRes.result && deductRes.result.message) || '星光不足，请先充值'
         }
       }
       pointsDeducted = true
@@ -135,6 +137,7 @@ async function runSyncGeneration(openid, featureId, imageUrls, inputValues = {})
       data: {
         _openid: openid,
         featureId: featureId,
+        templateVersionId: feature.publishedVersionId || '',
         featureName: feature.name,
         generationMode: 'sync',
         provider: modelProvider,
@@ -203,75 +206,50 @@ async function rateTask(openid, historyId, rating) {
     return { success: false, error: '非法的评价类型' }
   }
 
-  const historyRes = await db.collection('generation_history').doc(historyId).get()
-  const history = historyRes.data
-  if (!history) {
-    return { success: false, error: '生图记录不存在' }
-  }
+  return db.runTransaction(async (transaction) => {
+    const historyRef = transaction.collection('generation_history').doc(historyId)
+    const historyRes = await historyRef.get()
+    const history = historyRes.data
+    if (!history) return { success: false, error: '生图记录不存在' }
+    if (history._openid !== openid) return { success: false, error: '无权评价该生图记录' }
+    if (history.rating) return { success: false, error: '您已经评价过了' }
+    if (!history.featureId) return { success: false, error: '生图记录缺少模板信息，暂时无法评价' }
 
-  if (history._openid !== openid) {
-    return { success: false, error: '无权评价该生图记录' }
-  }
+    const featureRef = transaction.collection('ai_features').doc(history.featureId)
+    const featureRes = await featureRef.get()
+    if (!featureRes.data) return { success: false, error: '模板不存在' }
+    const increment = db.command.inc(1)
+    const counterPatch = rating === 'hang'
+      ? { user_hang_count: increment, hang_count: increment }
+      : { user_la_count: increment, la_count: increment }
 
-  if (history.rating) {
-    return { success: false, error: '您已经评价过了' }
-  }
-
-  // 尝试找寻关联的卡片 ID (featureId)
-  let featureId = history.featureId
-  if (!featureId && history.taskId) {
-    const taskRes = await db.collection('generation_tasks').doc(history.taskId).get().catch(() => null)
-    if (taskRes && taskRes.data) {
-      featureId = taskRes.data.featureId
-    }
-  }
-  if (!featureId && history.featureName) {
-    const featRes = await db.collection('ai_features').where({ name: history.featureName }).get().catch(() => null)
-    if (featRes && featRes.data && featRes.data.length > 0) {
-      featureId = featRes.data[0]._id
-    }
-  }
-
-  if (!featureId) {
-    return { success: false, error: '未找到关联的卡片，无法记录评分' }
-  }
-
-  const _ = db.command
-  const updateData = {}
-  if (rating === 'hang') {
-    updateData.hang_count = _.inc(1)
-  } else {
-    updateData.la_count = _.inc(1)
-  }
-
-  // 1. 更新卡片的点赞/踩统计总数
-  await db.collection('ai_features').doc(featureId).update({
-    data: updateData
+    await historyRef.update({
+      data: { rating, ratingUpdatedAt: db.serverDate() }
+    })
+    await featureRef.update({
+      data: { ...counterPatch, rating_count_updated_at: db.serverDate() }
+    })
+    return { success: true }
   })
-
-  // 2. 标记该历史记录为已评价
-  await db.collection('generation_history').doc(historyId).update({
-    data: {
-      rating
-    }
-  })
-
-  return { success: true }
 }
 
 exports.main = async (event, context) => {
   const wxContext = cloud.getWXContext()
   const openid = wxContext.OPENID || event.openid || event.userInfo?.openId
   const action = event.action || 'sync'
-  const { featureId, imageUrls, inputValues, taskId, page, pageSize, historyId, rating, upscaleTaskId } = event
+  const { featureId, imageUrls, inputValues, aspectRatio, idempotencyKey, taskId, taskIds, page, pageSize, historyId, rating, upscaleTaskId } = event
 
   try {
     if (action === 'createTask') {
-      return await createTask(openid, featureId, imageUrls, inputValues)
+      return await createTask(openid, featureId, imageUrls, inputValues, { aspectRatio, idempotencyKey })
     }
 
     if (action === 'getTaskStatus') {
       return await getTaskStatus(openid, taskId)
+    }
+
+    if (action === 'getTaskStatuses') {
+      return await getTaskStatuses(openid, taskIds)
     }
 
     if (action === 'rateTask') {

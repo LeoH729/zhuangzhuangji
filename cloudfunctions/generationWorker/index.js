@@ -64,7 +64,8 @@ async function refundPointsOnce(task) {
   await cloud.callFunction({
     name: 'points',
     data: {
-      action: 'recharge',
+      action: 'internalRecharge',
+      internalToken: process.env.INTERNAL_FUNCTION_TOKEN,
       amount: task.pointsCost,
       reason: `refund_task_${task._id}`,
       title: '生图失败退回',
@@ -177,7 +178,7 @@ async function processTask(taskId) {
     } else {
       // 同步通道（supersolo, coze, volcengine 等）因无法安全召回图片，为防止重复扣额度，直接置为失败并退回用户小程序积分
       console.warn(`[generationWorker] 任务 ${taskId} 为同步通道或缺失上游ID。将执行自动退款与标记失败。`)
-      const errorMsg = '生成超时（已自动退回积分）'
+      const errorMsg = '生成超时（已自动退回星光）'
       await markTaskFailed(task, errorMsg)
       return { success: false, taskId, error: errorMsg, recovered: true }
     }
@@ -217,6 +218,7 @@ async function processTask(taskId) {
       name: task.featureNameSnapshot || '',
       prompt: task.compiledPrompt || task.promptSnapshot || '',
       size: task.sizeSnapshot || '',
+      aspectRatio: task.requestedAspectRatio || task.sizeSnapshot || '',
       points_cost: task.pointsCost || 0
     }
 
@@ -284,6 +286,8 @@ async function processTask(taskId) {
         source: task.source || '',
         adminUid: task.adminUid || '',
         featureId: task.featureId || '',
+        generationId: task._id,
+        templateVersionId: task.templateVersionIdSnapshot || '',
         featureName: task.featureNameSnapshot || '',
         generationMode: 'worker',
         provider: modelProvider,
@@ -297,6 +301,8 @@ async function processTask(taskId) {
         compiledPrompt: task.compiledPrompt || task.promptSnapshot || '',
         templateType: task.templateType || 'image_to_image',
         size: task.sizeSnapshot || '',
+        requestedAspectRatio: task.requestedAspectRatio || task.sizeSnapshot || '',
+        effectiveAspectRatio: task.effectiveAspectRatio || task.requestedAspectRatio || task.sizeSnapshot || '',
         resultUrl: resultImageUrl,
         pointsCost: task.pointsCost || 0,
         enableUpscalePrint: !!task.enableUpscalePrintSnapshot,

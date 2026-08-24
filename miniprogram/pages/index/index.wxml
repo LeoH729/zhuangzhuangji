@@ -1,0 +1,95 @@
+<view class="container">
+  <view wx:if="{{generationNotice.visible}}" class="generation-notice" bindtap="onGenerationNoticeTap">
+    <image class="generation-notice-icon" src="/images/ic_picture.png" mode="aspectFit"></image>
+    <view class="generation-notice-copy">
+      <text class="generation-notice-title">生图完成</text>
+      <text class="generation-notice-text">{{generationNotice.message}}</text>
+    </view>
+    <view class="generation-notice-action">立即查看</view>
+  </view>
+
+  <!-- Group Tabs -->
+  <scroll-view class="tab-list" scroll-x="true" enhanced="true" show-scrollbar="false">
+    <view class="tab-item {{currentGroup === '全部' ? 'active' : ''}}" bindtap="onTabClick" data-group="全部">全部</view>
+    <view class="tab-item {{currentGroup === item ? 'active' : ''}}" wx:for="{{groups}}" wx:key="*this" bindtap="onTabClick" data-group="{{item}}">{{item}}</view>
+  </scroll-view>
+
+  <!-- 骨架屏占位（第一次进入、加载中且数据为空时展示） -->
+  <view class="waterfall" wx:if="{{isLoading && leftList.length === 0 && rightList.length === 0}}">
+    <view class="waterfall-col">
+      <view class="card skeleton-card" wx:for="{{[1, 2]}}" wx:key="*this">
+        <view class="card-image-wrap skeleton-img-box skeleton-shimmer" style="aspect-ratio: {{index % 2 === 0 ? '4/5' : '1/1'}}; height: auto;"></view>
+        <view class="card-content">
+          <view class="card-title skeleton-text-line skeleton-shimmer"></view>
+          <view class="card-footer">
+            <view class="card-cost skeleton-text-short skeleton-shimmer"></view>
+          </view>
+        </view>
+      </view>
+    </view>
+    <view class="waterfall-col">
+      <view class="card skeleton-card" wx:for="{{[1, 2]}}" wx:key="*this">
+        <view class="card-image-wrap skeleton-img-box skeleton-shimmer" style="aspect-ratio: {{index % 2 === 0 ? '1/1' : '4/5'}}; height: auto;"></view>
+        <view class="card-content">
+          <view class="card-title skeleton-text-line skeleton-shimmer"></view>
+          <view class="card-footer">
+            <view class="card-cost skeleton-text-short skeleton-shimmer"></view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 真实瀑布流列表 -->
+  <view class="waterfall" wx:else>
+    <view class="waterfall-col">
+      <view class="card" wx:for="{{leftList}}" wx:key="_id" bindtap="goToFeature" data-id="{{item._id}}">
+        <view class="card-image-wrap {{item.image.loaded ? '' : 'skeleton-shimmer skeleton-bg'}}" style="{{item.image.loaded ? '' : 'aspect-ratio: 4/5;'}}">
+          <!-- 右上角角标 -->
+          <view class="card-badge hot" wx:if="{{item.tag === 'hot'}}">HOT</view>
+          <view class="card-badge new" wx:if="{{item.tag === 'new'}}">NEW</view>
+          <image wx:if="{{!item.image.error}}" class="card-image fade-in {{item.image.loaded ? 'visible' : ''}}" mode="widthFix" src="{{item.image.displayUrl || 'https://dummyimage.com/400x500.png/F5F5F7/AAAAAA?text=Banner'}}" lazy-load bindload="onImageLoad" binderror="onImageError" data-id="{{item._id}}" data-col="left"></image>
+          <view wx:else class="card-image-fallback">图片暂时无法显示</view>
+        </view>
+        <view class="card-content">
+          <view class="card-title">{{item.name}}</view>
+          <view class="card-footer">
+            <view class="card-cost" wx:if="{{item.points_cost > 0}}">
+              <text class="cost-icon">✨</text>{{item.points_cost}} 星光
+            </view>
+            <view class="card-cost free" wx:else>限免</view>
+            <view class="card-btn">立即使用</view>
+          </view>
+        </view>
+      </view>
+    </view>
+    <view class="waterfall-col">
+      <view class="card" wx:for="{{rightList}}" wx:key="_id" bindtap="goToFeature" data-id="{{item._id}}">
+        <view class="card-image-wrap {{item.image.loaded ? '' : 'skeleton-shimmer skeleton-bg'}}" style="{{item.image.loaded ? '' : 'aspect-ratio: 4/5;'}}">
+          <!-- 右上角角标 -->
+          <view class="card-badge hot" wx:if="{{item.tag === 'hot'}}">HOT</view>
+          <view class="card-badge new" wx:if="{{item.tag === 'new'}}">NEW</view>
+          <image wx:if="{{!item.image.error}}" class="card-image fade-in {{item.image.loaded ? 'visible' : ''}}" mode="widthFix" src="{{item.image.displayUrl || 'https://dummyimage.com/400x500.png/F5F5F7/AAAAAA?text=Banner'}}" lazy-load bindload="onImageLoad" binderror="onImageError" data-id="{{item._id}}" data-col="right"></image>
+          <view wx:else class="card-image-fallback">图片暂时无法显示</view>
+        </view>
+        <view class="card-content">
+          <view class="card-title">{{item.name}}</view>
+          <view class="card-footer">
+            <view class="card-cost" wx:if="{{item.points_cost > 0}}">
+              <text class="cost-icon">✨</text>{{item.points_cost}} 星光
+            </view>
+            <view class="card-cost free" wx:else>限免</view>
+            <view class="card-btn">立即使用</view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+  
+  <view class="loading" wx:if="{{isLoading && (leftList.length > 0 || rightList.length > 0)}}">
+    <view class="spinner"></view>
+  </view>
+  <view class="empty" wx:if="{{!isLoading && leftList.length === 0 && rightList.length === 0}}">
+    暂无生图模板，敬请期待
+  </view>
+</view>

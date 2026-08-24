@@ -5,16 +5,106 @@ const axios = require('axios');
 // 初始化云开发环境
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
-// 从环境变量读取配置，并使用用户提供的正确值作为硬编码兜底，确保免配置即时可用
+// 环境变量优先；线上函数目前只配了 AppSecret，必须保留 AppID / OfferID / AppKey 兜底，否则会报 appid missing。
 const CONFIG = {
-  appId: process.env.WX_APP_ID || 'wx2e1dbc56f270e910',                        // 小程序 AppID
-  appSecret: process.env.WX_APP_SECRET,                                        // 小程序 AppSecret
-  offerId: process.env.XPAY_OFFER_ID || '1450540036',                          // 微信虚拟支付 OfferID
-  appKeySandbox: process.env.XPAY_APP_KEY_SANDBOX || 'NmSHjfUbu918c7ojfmRUuIoLznUmNTkr', // 微信虚拟支付 沙箱 AppKey
-  appKeyProd: process.env.XPAY_APP_KEY || 'ncvkmTWW4EvP8Ujt9D7pwpy248sBjPIX',   // 微信虚拟支付 现网 AppKey
-  // 支付环境：0为现网环境，1为沙箱环境。目前切换为 0 (现网)，供体验版/正式版测试真实支付
+  appId: String(process.env.WX_APP_ID || 'wx2e1dbc56f270e910').trim(),
+  appSecret: String(process.env.WX_APP_SECRET || '').trim(),
+  offerId: String(process.env.XPAY_OFFER_ID || '1450540036').trim(),
+  appKeySandbox: String(process.env.XPAY_APP_KEY_SANDBOX || 'NmSHjfUbu918c7ojfmRUuIoLznUmNTkr').trim(),
+  appKeyProd: String(process.env.XPAY_APP_KEY || 'ncvkmTWW4EvP8Ujt9D7pwpy248sBjPIX').trim(),
   env: parseInt(process.env.XPAY_ENV !== undefined ? process.env.XPAY_ENV : '0', 10)
 };
+
+function getActiveAppKey() {
+  return CONFIG.env === 1 ? CONFIG.appKeySandbox : CONFIG.appKeyProd
+}
+
+function getPaymentConfigError() {
+  const missing = []
+  if (!CONFIG.appId) missing.push('WX_APP_ID')
+  if (!CONFIG.offerId) missing.push('XPAY_OFFER_ID')
+  if (!getActiveAppKey()) missing.push(CONFIG.env === 1 ? 'XPAY_APP_KEY_SANDBOX' : 'XPAY_APP_KEY')
+  if (Number.isNaN(CONFIG.env) || ![0, 1].includes(CONFIG.env)) missing.push('XPAY_ENV')
+  return missing.length ? `虚拟支付配置不完整，缺少: ${missing.join(', ')}` : ''
+}
+
+function pickField(payload, keys = []) {
+  const source = payload && payload.data ? Object.assign({}, payload, payload.data) : (payload || {})
+  for (const key of keys) {
+    if (source[key]) return source[key]
+  }
+  return ''
+}
+
+async function getSessionKey(jsCode, appId) {
+  const errors = []
+  const openApiAttempts = [
+    () => cloud.openapi.auth.code2Session({ jsCode }),
+    () => cloud.openapi.auth.code2Session({ js_code: jsCode }),
+    () => cloud.openapi.login.code2Session({ js_code: jsCode, grant_type: 'authorization_code' })
+  ]
+  for (const attempt of openApiAttempts) {
+    try {
+      const res = await attempt()
+      const sessionKey = pickField(res, ['sessionKey', 'session_key'])
+      if (sessionKey) {
+        console.log('[virtualPayment] 通过云调用获取 session_key 成功')
+        return sessionKey
+      }
+    } catch (err) {
+      errors.push(`云调用 ${err.errCode || ''} ${err.message || err.errMsg || err}`.trim())
+    }
+  }
+
+  if (appId && CONFIG.appSecret) {
+    const sessionRes = await axios.get('https://api.weixin.qq.com/sns/jscode2session', {
+      params: {
+        appid: appId,
+        secret: CONFIG.appSecret,
+        js_code: jsCode,
+        grant_type: 'authorization_code'
+      }
+    })
+    if (sessionRes.data && sessionRes.data.session_key) return sessionRes.data.session_key
+    errors.push(`jscode2session ${sessionRes.data && sessionRes.data.errcode} ${sessionRes.data && sessionRes.data.errmsg}`)
+  } else {
+    errors.push('未配置有效 AppSecret')
+  }
+
+  throw new Error(errors.filter(Boolean).join('；') || '无法获取 session_key')
+}
+
+async function getAccessToken(appId) {
+  const openApiAttempts = [
+    () => cloud.openapi.getLatestAvailableToken(),
+    () => cloud.openapi.auth.getAccessToken({})
+  ]
+  for (const attempt of openApiAttempts) {
+    try {
+      const res = await attempt()
+      const token = pickField(res, ['accessToken', 'access_token'])
+      if (token) {
+        console.log('[virtualPayment] 通过云调用获取 access_token 成功')
+        return token
+      }
+    } catch (err) {
+      console.warn('[virtualPayment] 云调用 access_token 失败:', err && (err.message || err.errMsg))
+    }
+  }
+
+  if (!appId || !CONFIG.appSecret) {
+    throw new Error('无法获取 access_token：AppSecret 无效且云调用失败')
+  }
+  const tokenRes = await axios.get('https://api.weixin.qq.com/cgi-bin/token', {
+    params: {
+      grant_type: 'client_credential',
+      appid: appId,
+      secret: CONFIG.appSecret
+    }
+  })
+  if (tokenRes.data && tokenRes.data.access_token) return tokenRes.data.access_token
+  throw new Error(`获取微信接口令牌失败: ${(tokenRes.data && tokenRes.data.errmsg) || 'unknown'}`)
+}
 
 /**
  * HMAC-SHA256 签名计算辅助函数
@@ -69,9 +159,14 @@ async function handleRequest(event, context) {
     return { success: false, message: '无法获取有效的用户 OpenID' };
   }
 
-  // 根据当前环境选择对应的 AppKey
-  const activeAppKey = CONFIG.env === 1 ? CONFIG.appKeySandbox : CONFIG.appKeyProd;
-  console.log(`[virtualPayment] 当前环境: ${CONFIG.env === 1 ? '沙箱环境 (env=1)' : '现网环境 (env=0)'}`);
+  const activeAppKey = getActiveAppKey();
+  const runtimeAppId = String(wxContext.APPID || CONFIG.appId || '').trim();
+  console.log(`[virtualPayment] 当前环境: ${CONFIG.env === 1 ? '沙箱环境 (env=1)' : '现网环境 (env=0)'}, appid=${runtimeAppId}`);
+  const configError = getPaymentConfigError();
+  if (configError) {
+    console.error('[virtualPayment] 配置校验失败:', configError);
+    return { success: false, message: configError };
+  }
 
   // ==================== 动作 1：创建预下单订单并计算签名 ====================
   if (event.action === 'createOrder') {
@@ -85,34 +180,16 @@ async function handleRequest(event, context) {
     }
 
     try {
-      // 1. 使用临时 code 实时从微信官方换取 session_key
-      console.log('[virtualPayment] 正在请求微信 jscode2session 换取会话密钥...');
-      
-      // 获取 AppSecret 变量，如果环境变量未定义，则提示需要配置
-      const appSecret = CONFIG.appSecret || process.env.WX_APP_SECRET;
-      if (!appSecret) {
-        return { 
-          success: false, 
-          message: '未配置小程序 AppSecret。请先在云开发控制台的“环境变量”中配置 WX_APP_SECRET！' 
-        };
-      }
-
-      const sessionRes = await axios.get('https://api.weixin.qq.com/sns/jscode2session', {
-        params: {
-          appid: CONFIG.appId,
-          secret: appSecret,
-          js_code: code,
-          grant_type: 'authorization_code'
+      console.log('[virtualPayment] 正在换取 session_key, appid=', runtimeAppId);
+      let sessionKey = ''
+      try {
+        sessionKey = await getSessionKey(code, runtimeAppId)
+      } catch (sessionError) {
+        console.error('[virtualPayment] 换取 session_key 失败:', sessionError)
+        return {
+          success: false,
+          message: `获取微信 session_key 失败: ${sessionError.message || sessionError}`
         }
-      });
-
-      const sessionKey = sessionRes.data?.session_key;
-      if (!sessionKey) {
-        console.error('[virtualPayment] 换取 session_key 失败:', sessionRes.data);
-        return { 
-          success: false, 
-          message: `获取微信 session_key 失败: ${sessionRes.data?.errmsg || '账户配置或凭证无效'}` 
-        };
       }
       console.log('[virtualPayment] 成功换取 session_key');
 
@@ -218,25 +295,13 @@ async function handleRequest(event, context) {
       // 2. 本地尚未核销，主动向微信服务器发起 `/xpay/query_order` 查询最新支付状态
       console.log('[virtualPayment] 订单本地状态为 CREATED，向微信支付接口查询最新付款状态...', orderNo);
       
-      const appSecret = CONFIG.appSecret || process.env.WX_APP_SECRET;
-      if (!appSecret) {
-        return { success: false, message: '查单失败：未配置小程序 AppSecret' };
-      }
-
-      // A. 获取通用接口凭证 access_token
       console.log('[virtualPayment] 正在获取 access_token...');
-      const tokenRes = await axios.get('https://api.weixin.qq.com/cgi-bin/token', {
-        params: {
-          grant_type: 'client_credential',
-          appid: CONFIG.appId,
-          secret: appSecret
-        }
-      });
-      
-      const accessToken = tokenRes.data?.access_token;
-      if (!accessToken) {
-        console.error('[virtualPayment] 获取 access_token 失败:', tokenRes.data);
-        return { success: false, message: '获取微信接口令牌失败' };
+      let accessToken = ''
+      try {
+        accessToken = await getAccessToken(runtimeAppId)
+      } catch (tokenError) {
+        console.error('[virtualPayment] 获取 access_token 失败:', tokenError)
+        return { success: false, message: tokenError.message || '获取微信接口令牌失败' }
       }
 
       // B. 准备请求 Payload 字段 (按 ASCII 升序排序以保证对账接口签名一致性)
@@ -293,6 +358,7 @@ async function handleRequest(event, context) {
             await db.collection('user_points').doc(OPENID).update({
               data: {
                 points: _.inc(eggAmount),
+                lastReason: `recharge_vp_${order.amount}`,
                 updatedAt: new Date()
               }
             });
@@ -303,6 +369,7 @@ async function handleRequest(event, context) {
               await db.collection('user_points').doc(OPENID).set({
                 data: {
                   points: eggAmount,
+                  lastReason: `recharge_vp_${order.amount}`,
                   createdAt: new Date(),
                   updatedAt: new Date()
                 }

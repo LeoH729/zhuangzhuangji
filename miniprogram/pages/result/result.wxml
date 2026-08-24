@@ -1,0 +1,72 @@
+<view class="container pb-safe">
+  <view class="result-box-container">
+    <view class="result-box">
+      <image wx:if="{{!previewImage.error}}" class="result-image fade-in {{previewImage.loaded ? 'visible' : 'skeleton-shimmer skeleton-bg'}}" src="{{previewImage.displayUrl}}" mode="widthFix" bindtap="onPreviewImage" bindload="onImageLoad" binderror="onImageError" style="{{previewImage.loaded ? '' : 'aspect-ratio: 2/3;'}}"></image>
+      <view wx:else class="result-image result-image-fallback">图片暂时无法显示</view>
+    </view>
+
+    <view class="rating-section" wx:if="{{previewImage.loaded && !previewImage.error && id}}">
+      <view class="rating-hint">{{rating ? '感谢您的评价' : '觉得效果如何？'}}</view>
+      <view class="rating-actions">
+        <view class="rate-pill {{rating === 'hang' ? 'selected' : ''}} {{rating && rating !== 'hang' ? 'faded' : ''}} {{rating ? 'locked' : ''}}" bindtap="onRate" data-value="hang" aria-label="赞">
+          <text class="rate-emoji">👍</text>
+        </view>
+        <view class="rate-pill {{rating === 'la' ? 'selected' : ''}} {{rating && rating !== 'la' ? 'faded' : ''}} {{rating ? 'locked' : ''}}" bindtap="onRate" data-value="la" aria-label="踩">
+          <text class="rate-emoji">👎</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="action-box">
+    <view class="reward-bubble" wx:if="{{!shareTask.completed && !isSharedResult}}">+{{shareTask.reward}}星光奖励</view>
+    <view class="action-row">
+      <button class="result-action-btn result-action-secondary" bindtap="goHome" hover-class="btn-hover">回到首页</button>
+      <button class="result-action-btn result-action-secondary" bindtap="saveImage" hover-class="btn-hover">保存原图</button>
+      <button wx:if="{{isSharedResult}}" class="result-action-btn result-action-primary" bindtap="goGenerateSame" hover-class="btn-hover">生成同款图片</button>
+      <button wx:else class="result-action-btn result-action-primary" bindtap="openSharePanel" hover-class="btn-hover">分享给好友</button>
+    </view>
+  </view>
+
+  <view wx:if="{{showSharePanel}}" class="share-panel-mask" catchtap="closeSharePanel">
+    <view class="share-panel" catchtap="noop">
+      <view class="share-panel-title">分享图片</view>
+      <button class="share-panel-item" open-type="share" bindtap="prepareFriendShare">
+        <text class="share-panel-icon">💬</text>
+        <text class="share-panel-text">分享给好友</text>
+      </button>
+      <view class="share-panel-item" bindtap="shareToTimeline">
+        <text class="share-panel-icon">🌐</text>
+        <text class="share-panel-text">分享到朋友圈</text>
+      </view>
+      <view class="share-panel-item {{isSavingPoster ? 'disabled' : ''}}" bindtap="sharePosterFromPanel">
+        <text class="share-panel-icon">🖼️</text>
+        <text class="share-panel-text">生成分享海报</text>
+      </view>
+      <view class="share-panel-cancel" bindtap="closeSharePanel">取消</view>
+    </view>
+  </view>
+
+  <view wx:if="{{showSavePanel}}" class="share-panel-mask" catchtap="closeSavePanel">
+    <view class="share-panel" catchtap="noop">
+      <view class="share-panel-title">选择保存版本</view>
+      <view class="share-panel-item {{isUpscaling || isSavingImage ? 'disabled' : ''}}" bindtap="saveUpscaledFromPanel">
+        <text class="share-panel-icon">🖨️</text>
+        <view class="save-panel-text">
+          <text class="share-panel-text">高清可打印版</text>
+          <text class="save-panel-desc">{{upscaledUrl ? '已生成，直接保存' : upscalePointsCost + ' 星光/张，适合海报打印'}}</text>
+        </view>
+      </view>
+      <view class="share-panel-item {{isUpscaling || isSavingImage ? 'disabled' : ''}}" bindtap="saveOriginalFromPanel">
+        <text class="share-panel-icon">🖼️</text>
+        <view class="save-panel-text">
+          <text class="share-panel-text">普通原图版</text>
+          <text class="save-panel-desc">保存当前生成图片</text>
+        </view>
+      </view>
+      <view class="share-panel-cancel {{isUpscaling || isSavingImage ? 'disabled' : ''}}" bindtap="closeSavePanel">取消</view>
+    </view>
+  </view>
+
+  <canvas class="poster-canvas" id="sharePosterCanvas" type="2d"></canvas>
+</view>

@@ -1,0 +1,40 @@
+@import "../index/index.wxss";
+
+.diagnostic-banner-slot {
+  width: 100%;
+  min-height: 104rpx;
+  padding: 16rpx 24rpx 0;
+  background: var(--color-bg);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.group-filter {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 26rpx 24rpx;
+  padding: 32rpx 30rpx 28rpx;
+  background: rgba(247, 248, 250, 0.96);
+  backdrop-filter: blur(12px);
+  box-sizing: border-box;
+}
+
+.group-chip {
+  max-width: 100%;
+  padding: 12rpx 24rpx;
+  border-radius: 999rpx;
+  background: #e9ebf0;
+  color: #8c8f96;
+  font-size: 28rpx;
+  line-height: 1.4;
+  box-sizing: border-box;
+}
+
+.group-chip.active {
+  background: #1f1f1f;
+  color: #fff;
+}

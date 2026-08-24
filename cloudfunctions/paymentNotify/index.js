@@ -395,6 +395,7 @@ async function processPaymentSuccess(paymentData) {
             .update({
               data: {
                 points: _.inc(eggAmount),
+                lastReason: `recharge_${amount.total}`,
                 updatedAt: new Date()
               }
             });
@@ -404,6 +405,7 @@ async function processPaymentSuccess(paymentData) {
             await db.collection('user_points').doc(payer.openid).set({
               data: {
                 points: eggAmount,
+                lastReason: `recharge_${amount.total}`,
                 createdAt: new Date(),
                 updatedAt: new Date()
               }
@@ -421,14 +423,14 @@ async function processPaymentSuccess(paymentData) {
             type: 'recharge',
             amount: eggAmount,
             reason: `recharge_${amount.total}`,
-            title: order.description || '妆妆蛋充值',
+            title: order.description || '星光充值',
             createdAt: new Date()
           }
         });
 
-        console.log(`充值成功: 用户 ${payer.openid} 获得 ${eggAmount} 蛋`);
+        console.log(`充值成功: 用户 ${payer.openid} 获得 ${eggAmount} 星光`);
       } else {
-        console.warn('未找到充值数量 (eggAmount), 跳过加蛋逻辑');
+        console.warn('未找到充值数量 (eggAmount), 跳过星光入账逻辑');
       }
     } catch (bizError) {
       console.error('业务逻辑处理失败:', bizError);

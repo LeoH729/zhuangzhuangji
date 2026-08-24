@@ -1,0 +1,38 @@
+<view wx:if="{{displayVisible}}" class="reward-modal-mask">
+  <view class="reward-modal-card {{variant === 'boost' ? 'reward-modal-card-boost' : 'reward-modal-card-gift'}} {{usingFallback ? 'reward-modal-card-fallback' : ''}}" catchtap="noop">
+    <image
+      wx:if="{{backgroundPath}}"
+      class="reward-modal-background"
+      src="{{backgroundPath}}"
+      mode="aspectFill"
+    ></image>
+
+    <view wx:if="{{usingFallback && variant === 'gift'}}" class="reward-modal-fallback-art" aria-hidden="true">
+      <text class="reward-modal-fallback-icon">🎁</text>
+      <text class="reward-modal-fallback-title">新人好礼</text>
+    </view>
+
+    <block wx:if="{{variant === 'gift'}}">
+      <view class="reward-modal-copy reward-modal-gift-welcome">欢迎来到Ai造梦馆</view>
+      <view class="reward-modal-reward">
+        <view>赠送 <text>30</text> 星光</view>
+        <view class="reward-modal-value">价值等同人民币3元</view>
+      </view>
+      <view class="reward-modal-hint reward-modal-gift-hint">完整观看视频即可领取</view>
+      <view class="reward-modal-primary reward-modal-gift-primary" bindtap="onPrimaryTap">立即领取</view>
+      <view class="reward-modal-secondary reward-modal-gift-secondary" bindtap="onSecondaryTap">先逛逛</view>
+    </block>
+
+    <block wx:else>
+      <view class="reward-modal-title reward-modal-boost-title">加速生成</view>
+      <view class="reward-modal-copy reward-modal-boost-copy">当前生图任务较多</view>
+      <view class="reward-modal-hint reward-modal-boost-hint">观看视频可加速进入生成队列</view>
+      <view class="reward-modal-status">
+        <image class="reward-modal-status-icon" src="/images/reward-modal/queue-people.svg" mode="aspectFit"></image>
+        <text>前方排队中</text>
+      </view>
+      <view class="reward-modal-primary reward-modal-boost-primary" bindtap="onPrimaryTap">立即插队</view>
+      <view class="reward-modal-secondary reward-modal-boost-secondary" bindtap="onSecondaryTap">继续等待</view>
+    </block>
+  </view>
+</view>

@@ -1,0 +1,24 @@
+<view class="container pb-safe">
+  <view class="form-group">
+    <view class="section-title">反馈类型</view>
+    <picker bindchange="onTypeChange" value="{{typeIndex}}" range="{{feedbackTypes}}">
+      <view class="picker-view">
+        {{feedbackTypes[typeIndex]}}
+        <text class="arrow">></text>
+      </view>
+    </picker>
+  </view>
+
+  <view class="form-group">
+    <view class="section-title">问题描述/建议</view>
+    <textarea class="textarea" placeholder="请详细描述您遇到的问题或您的建议..." bindinput="onInput" data-field="content" value="{{content}}" maxlength="500"></textarea>
+    <view class="word-count">{{content.length}}/500</view>
+  </view>
+
+  <view class="action-box">
+    <button class="btn-primary {{content.length === 0 ? 'btn-disabled' : ''}}" bindtap="submitFeedback" hover-class="btn-hover" disabled="{{content.length === 0 || isSubmitting}}">
+      {{isSubmitting ? '提交中...' : '提交反馈'}}
+    </button>
+    <button wx:if="{{isAdmin}}" class="btn-secondary mt-30" bindtap="goToFeedbackList" hover-class="btn-hover">管理反馈记录 (管理员)</button>
+  </view>
+</view>

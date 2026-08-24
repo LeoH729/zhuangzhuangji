@@ -207,7 +207,7 @@ function generateOrderInfo(event, openid) {
   // 从前端传入的 options 获取实际支付信息
   const options = event.options || {};
   const amount = parseInt(options.amount, 10) || 1;       // 支付金额（分）
-  const description = options.description || '妆妆蛋充值'; // 商品描述
+  const description = options.description || '星光充值'; // 商品描述
   const attach = options.attach || '';                     // 业务数据（JSON字符串）
 
   console.log('订单生成参数:', { amount, description, attach });

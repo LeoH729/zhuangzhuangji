@@ -1,0 +1,15 @@
+{
+  "environment": "cloudbase-5gmfinom29f48930",
+  "indexes": [
+    { "collection": "user_points", "name": "updatedAt_desc", "fields": [{ "field": "updatedAt", "order": "desc" }] },
+    { "collection": "user_points", "name": "createdAt_desc", "fields": [{ "field": "createdAt", "order": "desc" }] },
+    { "collection": "user_points", "name": "points_desc", "fields": [{ "field": "points", "order": "desc" }] },
+    { "collection": "generation_tasks", "name": "status_createdAt", "fields": [{ "field": "status", "order": "asc" }, { "field": "createdAt", "order": "desc" }] },
+    { "collection": "generation_tasks", "name": "featureId_createdAt", "fields": [{ "field": "featureId", "order": "asc" }, { "field": "createdAt", "order": "desc" }] },
+    { "collection": "generation_tasks", "name": "openid_createdAt", "fields": [{ "field": "_openid", "order": "asc" }, { "field": "createdAt", "order": "desc" }] },
+    { "collection": "orders", "name": "status_createdAt", "fields": [{ "field": "status", "order": "asc" }, { "field": "createdAt", "order": "desc" }] },
+    { "collection": "feedbacks", "name": "status_createTime", "fields": [{ "field": "status", "order": "asc" }, { "field": "createTime", "order": "desc" }] },
+    { "collection": "audit_logs", "name": "createdAt_desc", "fields": [{ "field": "createdAt", "order": "desc" }] },
+    { "collection": "audit_logs", "name": "operatorUid_createdAt", "fields": [{ "field": "operatorUid", "order": "asc" }, { "field": "createdAt", "order": "desc" }] }
+  ]
+}

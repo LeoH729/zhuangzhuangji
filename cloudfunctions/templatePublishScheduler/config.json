@@ -1,0 +1,6 @@
+{
+  "permissions": { "openapi": [] },
+  "triggers": [
+    { "name": "template-publish-every-minute", "type": "timer", "config": "0 */1 * * * * *" }
+  ]
+}

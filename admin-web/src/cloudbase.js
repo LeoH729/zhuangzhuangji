@@ -3,31 +3,61 @@ import cloudbase from '@cloudbase/js-sdk'
 export const cloudbaseConfig = {
   env: import.meta.env.VITE_CLOUDBASE_ENV_ID || 'cloudbase-5gmfinom29f48930',
   region: import.meta.env.VITE_CLOUDBASE_REGION || 'ap-shanghai',
-  accessKey:
-    import.meta.env.VITE_CLOUDBASE_ACCESS_KEY ||
-    'eyJhbGciOiJSUzI1NiIsImtpZCI6IjlkMWRjMzFlLWI0ZDAtNDQ4Yi1hNzZmLWIwY2M2M2Q4MTQ5OCJ9.eyJpc3MiOiJodHRwczovL2Nsb3VkYmFzZS01Z21maW5vbTI5ZjQ4OTMwLmFwLXNoYW5naGFpLnRjYi1hcGkudGVuY2VudGNsb3VkYXBpLmNvbSIsInN1YiI6ImFub24iLCJhdWQiOiJjbG91ZGJhc2UtNWdtZmlub20yOWY0ODkzMCIsImV4cCI6NDA4NDA0ODA5OSwiaWF0IjoxNzgwMzY0ODk5LCJub25jZSI6Ik5vbkNVVkd0U00tS1pwbnczU01GbmciLCJhdF9oYXNoIjoiTm9uQ1VWR3RTTS1LWnBudzNTTUZuZyIsIm5hbWUiOiJBbm9ueW1vdXMiLCJzY29wZSI6ImFub255bW91cyIsInByb2plY3RfaWQiOiJjbG91ZGJhc2UtNWdtZmlub20yOWY0ODkzMCIsIm1ldGEiOnsicGxhdGZvcm0iOiJQdWJsaXNoYWJsZUtleSJ9LCJ1c2VyX3R5cGUiOiIiLCJjbGllbnRfdHlwZSI6ImNsaWVudF91c2VyIiwiaXNfc3lzdGVtX2FkbWluIjpmYWxzZX0.lM5WcH6d5J79Zzd6WmOaTluZKiBJKL56pfb3iIBvcwjSE4iZundwmpm8_OsihQswkJzu2cQPupZ4e9lHffz3u11O1jOez5Ys13ANSAsmtUzKeDJ05cKD03pIkATzC3Tu97oPxgNyl4WzDp7wPDb-Vn3szzPQ14qNBc3Y2Ef5CIYbtNqUJLcPOkWG31uVrwV-_X8rSjV1MkLSQLJRc-4s1cCdO4UgY2RAH5Guz621nGoSCq2iweKOq9t3tX0bk3srg-pFtOJTTj4iXkGKJ0UeEqvBicASklkz11UfgYdQQu4j1kYvMDoyCyrsCzoTqtRRgInIijwKrRDxlDPZujP6ZA'
+  accessKey: import.meta.env.VITE_CLOUDBASE_ACCESS_KEY || ''
 }
 
-export const app = cloudbase.init({
+const initOptions = {
   env: cloudbaseConfig.env,
   region: cloudbaseConfig.region,
-  accessKey: cloudbaseConfig.accessKey,
   auth: { detectSessionInUrl: true }
-})
+}
+if (cloudbaseConfig.accessKey) initOptions.accessKey = cloudbaseConfig.accessKey
 
+export const app = cloudbase.init(initOptions)
 export const auth = app.auth({ persistence: 'local' })
 
-export async function callAdmin(action, payload = {}) {
-  const res = await app.callFunction({
-    name: 'adminApi',
-    data: { action, payload }
-  })
+const MUTATION_LABELS = {
+  createModel: '模型已创建', updateModel: '模型已保存', deleteModel: '模型已删除',
+  createGroup: '分类已创建', updateGroup: '分类已保存', deleteGroup: '分类已删除',
+  saveFeatureDraft: '模板草稿已保存', publishFeature: '模板已发布', deleteFeature: '模板已删除',
+  offlineTemplate: '模板已下线',
+  updateTemplatePlacement: '推荐位与排序已保存', saveRecommendationOrder: '推荐位排序已保存',
+  rebuildTemplateRatingCounts: '模板评价计数已重建',
+  createImageAsset: '图片已创建', createImageAssets: '运营图片已上传', updateImageAsset: '图片已保存', deleteImageAsset: '图片已删除', syncStorageAssets: '图片同步完成',
+  createAdmin: '管理员已创建', updateAdmin: '管理员已保存', deleteAdmin: '管理员已删除',
+  resetAdminPassword: '管理员临时密码已生成', completePasswordReset: '密码修改已完成',
+  adjustUserPoints: '用户星光已调整', retryGenerationJob: '生成任务已重试', updateFeedback: '反馈状态已更新',
+  updateSystemConfig: '系统配置已保存'
+}
+
+function notifyToast(type, message) {
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('admin-toast', { detail: { type, message } }))
+}
+
+async function callFunction(name, action, payload = {}) {
+  const res = await app.callFunction({ name, data: { action, payload } })
   const result = res && res.result ? res.result : res
   if (!result || !result.success) {
     const message = (result && (result.message || result.error)) || '后台接口调用失败'
+    const suggestion = result && result.suggestion ? `；${result.suggestion}` : ''
+    notifyToast('error', `${message}${suggestion}`)
     const err = new Error(message)
     err.result = result
+    err.field = result && result.field
+    err.suggestion = result && result.suggestion
+    err.traceId = result && result.trace_id
     throw err
   }
   return result
+}
+
+export function callAdmin(action, payload = {}) {
+  return callFunction('adminApi', action, payload).then((result) => {
+    if (MUTATION_LABELS[action]) notifyToast('success', MUTATION_LABELS[action])
+    return result
+  })
+}
+
+export function callAnalytics(action, payload = {}) {
+  return callFunction('adminAnalytics', action, payload)
 }

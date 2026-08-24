@@ -152,7 +152,8 @@ async function refundPointsOnce(cloud, db, task, title = '高清打印版生成�
   await cloud.callFunction({
     name: 'points',
     data: {
-      action: 'recharge',
+      action: 'internalRecharge',
+      internalToken: process.env.INTERNAL_FUNCTION_TOKEN,
       amount: task.pointsCost,
       reason: `refund_upscale_${task._id}`,
       title,

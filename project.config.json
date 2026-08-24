@@ -24,7 +24,7 @@
     "disableUseStrict": false,
     "showShadowRootInWxmlPanel": true,
     "scopeDataCheck": false,
-    "ignoreDevUnusedFiles": false,
+    "ignoreDevUnusedFiles": true,
     "ignoreUploadUnusedFiles": true,
     "checkAppSecretSwitch": false,
     "useIsolateContext": true,
@@ -44,9 +44,30 @@
     "disableSWC": true
   },
   "compileType": "miniprogram",
+  "miniprogramRoot": "miniprogram/",
   "simulatorPluginLibVersion": {},
   "packOptions": {
     "ignore": [
+      {
+        "value": ".tmp/**",
+        "type": "glob"
+      },
+      {
+        "value": "tests/**",
+        "type": "glob"
+      },
+      {
+        "value": "web-app/**",
+        "type": "glob"
+      },
+      {
+        "value": "cloudrun/**",
+        "type": "glob"
+      },
+      {
+        "value": "cloudfunctionTemplate/**",
+        "type": "glob"
+      },
       {
         "value": ".npm-cache*/**",
         "type": "glob"
@@ -130,13 +151,25 @@
       {
         "value": "wxPaymentSDK/.DS_Store",
         "type": "file"
+      },
+      {
+        "value": "wxPaymentSDK/**",
+        "type": "glob"
+      },
+      {
+        "value": "miniprogram/config/admin-v21-indexes.json",
+        "type": "file"
+      },
+      {
+        "value": "miniprogram/config/mcporter.json",
+        "type": "file"
       }
     ],
     "include": []
   },
   "appid": "wx2e1dbc56f270e910",
   "editorSetting": {},
-  "libVersion": "3.16.0",
+  "libVersion": "3.10.1",
   "cloudfunctionRoot": "cloudfunctions/",
   "cloudbaseRoot": "cloudbase/",
   "cloudfunctionTemplateRoot": "cloudfunctionTemplate/"

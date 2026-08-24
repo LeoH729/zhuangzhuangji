@@ -1,0 +1,10 @@
+{
+  "permissions": { "openapi": [] },
+  "triggers": [
+    {
+      "name": "analytics-rollup-every-5-minutes",
+      "type": "timer",
+      "config": "0 */5 * * * * *"
+    }
+  ]
+}

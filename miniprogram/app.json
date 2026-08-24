@@ -1,0 +1,95 @@
+{
+  "pages": [
+    "pages/boss-zone/boss-zone",
+    "pages/play-zone/play-zone",
+    "pages/index/index",
+    "pages/profile/profile"
+  ],
+  "subpackages": [
+    {
+      "root": "pages/feature",
+      "name": "feature",
+      "pages": ["feature"]
+    },
+    {
+      "root": "pages/feature-unavailable",
+      "name": "feature-unavailable",
+      "pages": ["feature-unavailable"]
+    },
+    {
+      "root": "pages/analyzing",
+      "name": "analyzing",
+      "pages": ["analyzing"]
+    },
+    {
+      "root": "pages/result",
+      "name": "result",
+      "pages": ["result"]
+    },
+    {
+      "root": "pages/points",
+      "name": "points",
+      "pages": ["points"]
+    },
+    {
+      "root": "pages/generation-history",
+      "name": "generation-history",
+      "pages": ["generation-history"]
+    },
+    {
+      "root": "pages/feedback",
+      "name": "feedback",
+      "pages": ["feedback"]
+    },
+    {
+      "root": "pages/feedback-list",
+      "name": "feedback-list",
+      "pages": ["feedback-list"]
+    }
+  ],
+  "window": {
+    "enableShareAppMessage": true,
+    "enableShareTimeline": true,
+    "navigationBarTitleText": "Ai造梦",
+    "navigationBarBackgroundColor": "#FFFFFF",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#F7F8FA"
+  },
+  "debug": false,
+  "resizable": false,
+  "tabBar": {
+    "list": [
+      {
+        "pagePath": "pages/boss-zone/boss-zone",
+        "text": "老板专区",
+        "iconPath": "images/icon_boss.png",
+        "selectedIconPath": "images/icon_boss_selected.png"
+      },
+      {
+        "pagePath": "pages/play-zone/play-zone",
+        "text": "玩图专区",
+        "iconPath": "images/icon_play.png",
+        "selectedIconPath": "images/icon_play_selected.png"
+      },
+      {
+        "pagePath": "pages/profile/profile",
+        "text": "我的",
+        "iconPath": "images/icon_profile.png",
+        "selectedIconPath": "images/icon_profile_selected.png"
+      }
+    ],
+    "color": "#A0A5AF",
+    "selectedColor": "#222222",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "white"
+  },
+  "lazyCodeLoading": "requiredComponents",
+  "permission": {
+    "scope.camera": {
+      "desc": "用于拍摄照片以生成图片"
+    },
+    "scope.writePhotosAlbum": {
+      "desc": "用于保存生成的图片"
+    }
+  }
+}

@@ -2,6 +2,7 @@ const cloud = require('wx-server-sdk')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
+const _ = db.command
 
 const TASKS_COLLECTION = 'generation_tasks'
 const RUNNING_TIMEOUT_MS = 16 * 60 * 1000
@@ -9,6 +10,7 @@ const UPSTREAM_POLL_INTERVAL_MS = 10000
 const TEMPLATE_TYPE_IMAGE = 'image_to_image'
 const TEMPLATE_TYPE_TEXT = 'text_to_image'
 const TEXT_TO_IMAGE_PROVIDERS = ['volcengine', 'supersolo', 'supersolo_async', 'toapis', 'joapi', 'jimeng_cli']
+const SUPPORTED_ASPECT_RATIOS = ['1:1', '3:4', '4:3', '4:5', '9:16', '16:9']
 
 function normalizeTemplateType(value) {
   return value === TEMPLATE_TYPE_TEXT ? TEMPLATE_TYPE_TEXT : TEMPLATE_TYPE_IMAGE
@@ -48,13 +50,35 @@ function escapeRegExp(value = '') {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-function compilePrompt(prompt = '', fields = [], inputValues = {}) {
+function normalizeAspectRatio(value = '', fallback = '') {
+  const ratio = String(value || '').trim()
+  return SUPPORTED_ASPECT_RATIOS.includes(ratio) ? ratio : fallback
+}
+
+function extractAspectRatioFromPrompt(prompt = '') {
+  const matches = String(prompt || '').matchAll(/(?:^|[^\d])(1|3|4|9|16)\s*[:：]\s*(1|3|4|5|9|16)(?!\d)/g)
+  for (const match of matches) {
+    const ratio = normalizeAspectRatio(`${match[1]}:${match[2]}`)
+    if (ratio) return ratio
+  }
+  return ''
+}
+
+function appendAspectRatioInstruction(prompt = '', aspectRatio = '') {
+  const ratio = normalizeAspectRatio(aspectRatio)
+  if (!ratio) return String(prompt || '')
+  const [width, height] = ratio.split(':').map(Number)
+  const orientation = width === height ? '方形' : width < height ? '竖版' : '横版'
+  return `${String(prompt || '').trim()}\n画布横纵比严格采用 ${ratio} ${orientation}构图，主体、品牌和重要文案保持在安全区域内；不得使用黑边、白边、拼贴边框或简单裁切来伪造比例。`.trim()
+}
+
+function compilePrompt(prompt = '', fields = [], inputValues = {}, aspectRatio = '') {
   let compiled = String(prompt || '')
   fields.forEach((field) => {
     const pattern = new RegExp(`\\{${escapeRegExp(field.key)}\\}`, 'g')
     compiled = compiled.replace(pattern, inputValues[field.key] || '')
   })
-  return compiled
+  return appendAspectRatioInstruction(compiled, aspectRatio)
 }
 
 function toTimestamp(value) {
@@ -80,7 +104,8 @@ async function refundFeaturePoints(openid, amount, featureId) {
   await cloud.callFunction({
     name: 'points',
     data: {
-      action: 'recharge',
+      action: 'internalRecharge',
+      internalToken: process.env.INTERNAL_FUNCTION_TOKEN,
       amount,
       reason: `refund_${featureId}`,
       title: '生图失败退回',
@@ -97,6 +122,7 @@ function buildTaskResponse(task) {
   return {
     taskId: task._id,
     featureId: task.featureId || '',
+    templateVersionId: task.templateVersionIdSnapshot || '',
     status: task.status,
     upstreamStatus: task.upstreamStatus || '',
     resultUrl: task.resultUrl || '',
@@ -118,7 +144,7 @@ function buildTaskResponse(task) {
   }
 }
 
-async function createTask(openid, featureId, imageUrls, inputValues = {}) {
+async function createTask(openid, featureId, imageUrls, inputValues = {}, options = {}) {
   if (!openid) {
     return { success: false, error: '用户未登录' }
   }
@@ -137,9 +163,28 @@ async function createTask(openid, featureId, imageUrls, inputValues = {}) {
   const templateType = normalizeTemplateType(feature.template_type)
   const inputFields = normalizeInputFields(feature.input_fields)
   const normalizedInputValues = normalizeInputValues(inputValues, inputFields)
+  const idempotencyKey = String(options.idempotencyKey || '').trim().slice(0, 100)
+  if (idempotencyKey) {
+    const existingRes = await db.collection(TASKS_COLLECTION).where({ _openid: openid, idempotencyKey }).limit(1).get()
+    if (existingRes.data && existingRes.data[0]) {
+      return { success: true, taskId: existingRes.data[0]._id, reused: true }
+    }
+  }
+  // Compatibility order: explicit client selection -> template setting -> prompt instruction.
+  // Only use 1:1 when none of those sources defines a supported ratio. This prevents
+  // the fallback from overriding prompts that already require 3:4, 9:16, etc.
+  const promptAspectRatio = extractAspectRatioFromPrompt(feature.prompt || '')
+  const templateAspectRatio = normalizeAspectRatio(feature.aspect_ratio || feature.aspectRatio || feature.size)
+  const requestedAspectRatio = normalizeAspectRatio(options.aspectRatio, templateAspectRatio || promptAspectRatio || '1:1')
+  const supportedRatios = Array.isArray(feature.supported_ratios) && feature.supported_ratios.length
+    ? feature.supported_ratios.map(item => normalizeAspectRatio(item)).filter(Boolean)
+    : SUPPORTED_ASPECT_RATIOS
+  if (!supportedRatios.includes(requestedAspectRatio)) {
+    return { success: false, error: '当前模板不支持该图片比例' }
+  }
   const compiledPrompt = templateType === TEMPLATE_TYPE_TEXT
-    ? compilePrompt(feature.prompt || '', inputFields, normalizedInputValues)
-    : (feature.prompt || '')
+    ? compilePrompt(feature.prompt || '', inputFields, normalizedInputValues, requestedAspectRatio)
+    : appendAspectRatioInstruction(feature.prompt || '', requestedAspectRatio)
   const normalizedImageUrls = Array.isArray(imageUrls) ? imageUrls.filter(Boolean) : []
 
   if (templateType === TEMPLATE_TYPE_IMAGE) {
@@ -176,7 +221,7 @@ async function createTask(openid, featureId, imageUrls, inputValues = {}) {
     if (!deductRes || !deductRes.result || !deductRes.result.success) {
       return {
         success: false,
-        error: (deductRes && deductRes.result && deductRes.result.message) || '积分不足，请先充值'
+        error: (deductRes && deductRes.result && deductRes.result.message) || '星光不足，请先充值'
       }
     }
     pointsDeducted = true
@@ -234,11 +279,15 @@ async function createTask(openid, featureId, imageUrls, inputValues = {}) {
       templateType,
       modelCallIdSnapshot: feature.model_call_id || '',
       fallbackModelCallIdSnapshot: fallbackModelCallId,
-      sizeSnapshot: feature.size || '',
+      sizeSnapshot: requestedAspectRatio,
+      requestedAspectRatio,
+      effectiveAspectRatio: requestedAspectRatio,
+      idempotencyKey,
       activeModelRole: 'primary',
       fallbackUsed: false,
       fallbackErrorMessage: '',
       featureNameSnapshot: feature.name || '',
+      templateVersionIdSnapshot: feature.publishedVersionId || '',
       enableUpscalePrintSnapshot: !!feature.enable_upscale_print,
       pointsCost,
       pointsDeducted,
@@ -289,6 +338,25 @@ async function getTaskStatus(openid, taskId) {
   return {
     success: true,
     task: buildTaskResponse(task)
+  }
+}
+
+async function getTaskStatuses(openid, taskIds = []) {
+  if (!openid) return { success: false, error: '用户未登录' }
+  const ids = [...new Set((Array.isArray(taskIds) ? taskIds : [])
+    .map((item) => String(item || '').trim())
+    .filter(Boolean))]
+  if (ids.length === 0) return { success: true, tasks: [] }
+  if (ids.length > 20) return { success: false, code: 'TOO_MANY_TASKS', error: '一次最多查询20个任务' }
+
+  const result = await db.collection(TASKS_COLLECTION)
+    .where({ _openid: openid, _id: _.in(ids) })
+    .limit(20)
+    .get()
+  const taskMap = new Map((result.data || []).map((task) => [task._id, buildTaskResponse(task)]))
+  return {
+    success: true,
+    tasks: ids.map((id) => taskMap.get(id)).filter(Boolean)
   }
 }
 
@@ -391,6 +459,7 @@ async function listTasks(openid, page = 0, pageSize = 10) {
 module.exports = {
   createTask,
   getTaskStatus,
+  getTaskStatuses,
   ensureWorker,
   buildTaskResponse,
   TASKS_COLLECTION,
@@ -399,5 +468,6 @@ module.exports = {
   normalizeInputFields,
   normalizeInputValues,
   compilePrompt,
+  extractAspectRatioFromPrompt,
   TEXT_TO_IMAGE_PROVIDERS
 }

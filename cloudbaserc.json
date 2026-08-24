@@ -7,13 +7,63 @@
       "name": "adminApi",
       "runtime": "Nodejs18.15",
       "handler": "index.main",
-      "timeout": 15
+      "timeout": 60
     },
     {
       "name": "featureConfig",
       "runtime": "Nodejs18.15",
       "handler": "index.main",
       "timeout": 15
+    },
+    {
+      "name": "feedback",
+      "runtime": "Nodejs16.13",
+      "handler": "index.main",
+      "timeout": 3,
+      "memorySize": 256,
+      "installDependency": true
+    },
+    {
+      "name": "analyticsIngest",
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "timeout": 15
+    },
+    {
+      "name": "adminAnalytics",
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "timeout": 30
+    },
+    {
+      "name": "analyticsAggregate",
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "timeout": 60
+    },
+    {
+      "name": "aiGenerate",
+      "runtime": "Nodejs16.13",
+      "handler": "index.main",
+      "timeout": 900,
+      "memorySize": 256,
+      "installDependency": true
+    },
+    {
+      "name": "virtualPayment",
+      "runtime": "Nodejs16.13",
+      "handler": "index.main",
+      "timeout": 60,
+      "memorySize": 256,
+      "installDependency": true,
+      "envVariables": {
+        "WX_APP_ID": "wx2e1dbc56f270e910",
+        "WX_APP_SECRET": "bda1a509015d79a54c5fa16884bf3aaa",
+        "XPAY_OFFER_ID": "1450540036",
+        "XPAY_APP_KEY_SANDBOX": "NmSHjfUbu918c7ojfmRUuIoLznUmNTkr",
+        "XPAY_APP_KEY": "ncvkmTWW4EvP8Ujt9D7pwpy248sBjPIX",
+        "XPAY_ENV": "0"
+      }
     }
   ]
 }

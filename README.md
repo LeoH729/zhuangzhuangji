@@ -16,38 +16,42 @@
 
 ## 项目结构
 ```text
-AI生图小程序/
-├── app.js / app.json / app.wxss    # 小程序全局配置与极简样式体系
-├── utils/
-│   └── page-share-mixin.js         # 全局分享能力
-├── pages/
+zhuangzhuangji-main/
+├── miniprogram/                    # 微信开发者工具唯一编译根目录
+│   ├── app.js / app.json / app.wxss
+│   ├── components/
+│   ├── config/
+│   ├── images/
+│   ├── utils/
+│   └── pages/
 │   ├── index/                      # 首页：动态瀑布流卡片
 │   ├── feature/                    # 功能详情页：上传图片及参数配置
-│   ├── makeup-generating/          # 生图中等待页（进度动画）
+│   ├── analyzing/                  # 生图中等待页
 │   ├── result/                     # 生图结果页
 │   ├── profile/                    # 我的：个人中心
 │   ├── points/                     # 积分充值与说明
 │   ├── generation-history/         # 生成记录
 │   └── feedback/ / feedback-list/  # 意见反馈
+├── admin-web/                      # 运营后台，位于小程序编译根之外
 ├── cloudfunctions/                 # 云函数目录
-│   ├── featureConfig/              # 管理端与客户端读取功能的接口
-│   ├── modelConfig/                # AI模型鉴权与配置接口
-│   ├── aiGenerate/                 # 核心代理函数：发起生图调用
-│   ├── login/                      # 获取用户标识
-│   ├── points/                     # 积分增删扣减（并发安全）
-│   ├── createPayment/ / paymentNotify/ # 微信支付相关
-│   └── feedback/                   # 提交与拉取反馈
-└── README_CLOUD_SETUP.md           # 云开发环境部署与集合说明
+├── cloudbase/                      # 云开发配置与静态托管资源
+├── tests/ / scripts/ / docs/       # 测试、运维脚本和文档
+├── project.config.json             # miniprogramRoot=miniprogram/
+└── README_CLOUD_SETUP.md
+
+zhuangzhuangji-web/                 # 同级独立Next.js网站项目
 ```
 
 ## 本地运行指南
 
 1. 下载或 Clone 本项目。
-2. 使用微信开发者工具打开该目录。
+2. 使用微信开发者工具打开 `zhuangzhuangji-main`；工具会按 `miniprogramRoot` 只编译 `miniprogram/`。
 3. 替换/填入自己的 `AppID`。
 4. 开通云开发，在开发者工具顶部选择对应的云环境。
 5. 参考 **`README_CLOUD_SETUP.md`** 创建相应的云数据库集合，并上传部署所有云函数。
 6. 编译运行。
+
+网站请单独进入同级 `zhuangzhuangji-web` 目录执行 `npm run dev`，不要再把网站源码或构建产物放回小程序项目。
 
 ## 许可证
 暂未提供开源许可证，仅供参考或内部使用。

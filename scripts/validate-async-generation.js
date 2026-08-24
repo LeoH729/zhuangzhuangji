@@ -9,7 +9,7 @@ const requiredFiles = [
   'cloudfunctions/generationWorker/index.js',
   'cloudfunctions/generationWorker/generationExecutor.js',
   'cloudfunctions/generationWorker/config.json',
-  'pages/analyzing/analyzing.js',
+  'miniprogram/pages/analyzing/analyzing.js',
   'docs/generation_tasks_schema.json'
 ]
 
@@ -46,9 +46,9 @@ loadModule('cloudfunctions/generationWorker/generationExecutor.js')
 const aiGenerateSource = fs.readFileSync(path.join(root, 'cloudfunctions/aiGenerate/index.js'), 'utf8')
 const workerSource = fs.readFileSync(path.join(root, 'cloudfunctions/generationWorker/index.js'), 'utf8')
 const workerExecutorSource = fs.readFileSync(path.join(root, 'cloudfunctions/generationWorker/generationExecutor.js'), 'utf8')
-const analyzingSource = fs.readFileSync(path.join(root, 'pages/analyzing/analyzing.js'), 'utf8')
+const analyzingSource = fs.readFileSync(path.join(root, 'miniprogram/pages/analyzing/analyzing.js'), 'utf8')
 const taskHelpersSource = fs.readFileSync(path.join(root, 'cloudfunctions/aiGenerate/taskHelpers.js'), 'utf8')
-const historySource = fs.readFileSync(path.join(root, 'pages/generation-history/generation-history.js'), 'utf8')
+const historySource = fs.readFileSync(path.join(root, 'miniprogram/pages/generation-history/generation-history.js'), 'utf8')
 
 const checks = [
   ['aiGenerate createTask action', aiGenerateSource.includes("action === 'createTask'")],

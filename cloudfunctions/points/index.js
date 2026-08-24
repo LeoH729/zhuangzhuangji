@@ -1,5 +1,6 @@
-// 云函数：妆妆蛋积分系统（配置、初始化、原子扣减、充值、收支明细）
+// 云函数：星光系统（配置、初始化、原子扣减、充值、收支明细）
 const cloud = require('wx-server-sdk')
+const crypto = require('crypto')
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV })
 const db = cloud.database()
@@ -21,12 +22,23 @@ const NEW_USER_GIFT_REWARD = 30
 const RESULT_SHARE_TASK_ID = 'result_share'
 const RESULT_SHARE_TASK_LIMIT = 2
 const RESULT_SHARE_TASK_REWARD = 10
+const CONFIG_CACHE_TTL_MS = 60 * 1000
+
+let configCache = null
+let configCacheExpiresAt = 0
+
+function isValidInternalToken(value = '') {
+  const expected = String(process.env.INTERNAL_FUNCTION_TOKEN || '')
+  const received = String(value || '')
+  if (!expected || !received || expected.length !== received.length) return false
+  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received))
+}
 
 exports.main = async (event, context) => {
   const wxContext = cloud.getWXContext()
   const openid = wxContext.OPENID || event.openid
-  const { action, amount, reason, title } = event || {}
-  console.log('[points] entry', { action, amount, reason, title, openid })
+  const { action, amount, reason, title, internalToken } = event || {}
+  console.log('[points] entry', { action, amount, reason, title, hasOpenid: !!openid })
 
   try {
     switch (action) {
@@ -39,7 +51,12 @@ exports.main = async (event, context) => {
       case 'consume':
         return await consumePoints(openid, amount, reason, title)
       case 'recharge':
-        return await rechargePoints(openid, amount, reason, title)
+        return { success: false, code: 'FORBIDDEN', message: '客户端充值入口已关闭' }
+      case 'internalRecharge':
+        if (!isValidInternalToken(internalToken)) {
+          return { success: false, code: 'FORBIDDEN', message: '内部调用鉴权失败' }
+        }
+        return await rechargePoints(event.openid, amount, reason, title)
       case 'getHistory':
         return await getHistory(openid, event.limit, event.skip)
       case 'getShareTask':
@@ -74,7 +91,7 @@ const DEFAULT_STYLES = [
 
 async function defaultConfig() {
   return {
-    name: '妆妆蛋',
+    name: '星光',
     initial_points: 100,
     analyze_cost: 3,
     generate_cost: 5,
@@ -89,6 +106,9 @@ async function defaultConfig() {
 
 // 获取全局配置（不存在则初始化，存在但缺styles则补全）
 async function getConfig() {
+  if (configCache && configCacheExpiresAt > Date.now()) {
+    return { success: true, data: configCache, cached: true }
+  }
   try {
     const res = await db.collection(CONFIG_COLLECTION).doc(CONFIG_ID).get()
     if (res.data) {
@@ -99,6 +119,12 @@ async function getConfig() {
       // 如果缺 tips_image_url，补全默认值
       const updateData = {};
       let needsUpdate = false;
+
+      if (res.data.name !== '星光') {
+        updateData.name = '星光';
+        res.data.name = '星光';
+        needsUpdate = true;
+      }
 
       if (!res.data.tips_image_url) {
         updateData.tips_image_url = '/images/icon_tips_small.svg';
@@ -119,6 +145,8 @@ async function getConfig() {
         });
       }
 
+      configCache = res.data
+      configCacheExpiresAt = Date.now() + CONFIG_CACHE_TTL_MS
       return { success: true, data: res.data }
     }
   } catch (_) { }
@@ -126,30 +154,31 @@ async function getConfig() {
   const cfg = await defaultConfig()
   console.log('[points] getConfig init default')
   await db.collection(CONFIG_COLLECTION).doc(CONFIG_ID).set({ data: cfg })
+  configCache = cfg
+  configCacheExpiresAt = Date.now() + CONFIG_CACHE_TTL_MS
   return { success: true, data: cfg, init: true }
 }
 
 // 确保用户积分文档存在（_id = OPENID）
 async function ensureUserPoints(openid) {
-  console.log('[points] ensureUserPoints start', openid)
-  const cfgRes = await getConfig()
-  const initPoints = (cfgRes && cfgRes.data && cfgRes.data.initial_points) || 100
+  if (!openid) return { success: false, code: 'NO_OPENID', message: '用户未登录' }
   const now = formatDateTime()
   try {
     const doc = await db.collection(USER_COLLECTION).doc(openid).get()
     if (doc && doc.data) {
-      console.log('[points] ensureUserPoints exists', doc.data)
       return { success: true, data: doc.data }
     }
   } catch (_) { }
 
+  const cfgRes = await getConfig()
+  const initPoints = (cfgRes && cfgRes.data && cfgRes.data.initial_points) || 100
   const initDoc = {
     points: initPoints,
-    name: (cfgRes && cfgRes.data && cfgRes.data.name) || '妆妆蛋',
+    name: '星光',
     createdAt: now,
     updatedAt: now
   }
-  console.log('[points] ensureUserPoints create', initDoc)
+  console.log('[points] initialized user balance')
   await db.collection(USER_COLLECTION).doc(openid).set({ data: initDoc })
   return { success: true, data: initDoc, init: true }
 }
@@ -197,7 +226,7 @@ async function consumePoints(openid, amount, reason = '', title = '') {
       const initPoints = (cfgRes && cfgRes.data && cfgRes.data.initial_points) || 100
       console.log('[points] consume init user doc in tx', { openid, initPoints })
       await transaction.collection(USER_COLLECTION).doc(openid).set({
-        data: { points: initPoints, name: (cfgRes && cfgRes.data && cfgRes.data.name) || '妆妆蛋', createdAt: now, updatedAt: now }
+        data: { points: initPoints, name: '星光', createdAt: now, updatedAt: now }
       })
       doc = await transaction.collection(USER_COLLECTION).doc(openid).get()
     }
@@ -210,7 +239,7 @@ async function consumePoints(openid, amount, reason = '', title = '') {
       return { success: true, data: { points: current } }
     }
     if (current < amount) {
-      return { success: false, code: 'INSUFFICIENT', message: '积分不足', data: { points: current } }
+      return { success: false, code: 'INSUFFICIENT', message: '星光不足', data: { points: current } }
     }
 
     await transaction.collection(USER_COLLECTION).doc(openid).update({
@@ -242,7 +271,7 @@ async function rechargePoints(openid, amount, reason = '', title = '') {
 
   // 原子增加积分
   await db.collection(USER_COLLECTION).doc(openid).update({
-    data: { points: _.inc(amount), updatedAt: now }
+    data: { points: _.inc(amount), updatedAt: now, lastReason: reason || 'recharge' }
   })
 
   // 读取更新后的积分
@@ -250,7 +279,7 @@ async function rechargePoints(openid, amount, reason = '', title = '') {
   const after = (doc && doc.data && doc.data.points) || 0
 
   // 记录流水
-  const displayTitle = title || `充值${amount}蛋`
+  const displayTitle = title || `充值 ${amount} 星光`
   await addHistory(openid, 'recharge', amount, reason, displayTitle)
 
   return { success: true, data: { points: after } }
@@ -395,11 +424,14 @@ async function claimShareReward(openid, channel = '', historyId = '') {
 }
 
 async function getNewUserGiftTask(openid) {
-  console.log('[points] getNewUserGiftTask', { openid })
   if (!openid) {
     return { success: false, code: 'NO_OPENID', message: '用户未登录' }
   }
-  await ensureUserPoints(openid)
+  try {
+    await db.collection(USER_COLLECTION).doc(openid).get()
+  } catch (_) {
+    await ensureUserPoints(openid)
+  }
   const taskId = `${openid}_${NEW_USER_GIFT_TASK_ID}`
   let task = null
   try {
